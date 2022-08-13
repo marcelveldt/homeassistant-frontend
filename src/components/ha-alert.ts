@@ -46,6 +46,7 @@ class HaAlert extends LitElement {
           rtl: this.rtl,
           [this.alertType]: true,
         })}"
+        role="alert"
       >
         <div class="icon ${this.title ? "" : "no-title"}">
           <slot name="icon">
@@ -121,6 +122,7 @@ class HaAlert extends LitElement {
     }
     .main-content {
       overflow-wrap: anywhere;
+      word-break: break-word;
       margin-left: 8px;
       margin-right: 0;
     }

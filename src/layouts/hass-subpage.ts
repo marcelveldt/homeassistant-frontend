@@ -91,7 +91,7 @@ class HassSubpage extends LitElement {
         box-sizing: border-box;
       }
       .toolbar a {
-        color: var(--app-header-text-color);
+        color: var(--sidebar-text-color);
         text-decoration: none;
       }
 
@@ -99,6 +99,7 @@ class HassSubpage extends LitElement {
       ha-icon-button-arrow-prev,
       ::slotted([slot="toolbar-icon"]) {
         pointer-events: auto;
+        color: var(--sidebar-icon-color);
       }
 
       .main-title {

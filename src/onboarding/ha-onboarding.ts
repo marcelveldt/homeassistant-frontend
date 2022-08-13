@@ -124,7 +124,6 @@ class HaOnboarding extends litLocalizeLiteMixin(HassElement) {
   protected firstUpdated(changedProps: PropertyValues) {
     super.firstUpdated(changedProps);
     this._fetchOnboardingSteps();
-    this._fetchInstallationType();
     import("./onboarding-integrations");
     import("./onboarding-core-config");
     registerServiceWorker(this, false);
@@ -139,10 +138,12 @@ class HaOnboarding extends litLocalizeLiteMixin(HassElement) {
           default_theme: "default",
           default_dark_theme: null,
           themes: {},
-          darkMode: false,
+          darkMode: true,
+          theme: "default",
         },
-        "default",
-        { dark: true }
+        undefined,
+        undefined,
+        true
       );
     }
   }
@@ -213,6 +214,9 @@ class HaOnboarding extends litLocalizeLiteMixin(HassElement) {
         });
         history.replaceState(null, "", location.pathname);
         await this._connectHass(auth);
+      } else {
+        // User creating screen needs to know the installation type.
+        this._fetchInstallationType();
       }
 
       this._steps = steps;

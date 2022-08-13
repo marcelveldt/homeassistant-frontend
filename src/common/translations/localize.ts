@@ -3,10 +3,37 @@ import { shouldPolyfill as shouldPolyfillPluralRules } from "@formatjs/intl-plur
 import { shouldPolyfill as shouldPolyfillRelativeTime } from "@formatjs/intl-relativetimeformat/lib/should-polyfill";
 import { shouldPolyfill as shouldPolyfillDateTime } from "@formatjs/intl-datetimeformat/lib/should-polyfill";
 import IntlMessageFormat from "intl-messageformat";
-import { Resources } from "../../types";
+import { Resources, TranslationDict } from "../../types";
 import { getLocalLanguage } from "../../util/common-translation";
 
-export type LocalizeFunc = (key: string, ...args: any[]) => string;
+// Exclude some patterns from key type checking for now
+// These are intended to be removed as errors are fixed
+// Fixing component category will require tighter definition of types from backend and/or web socket
+export type LocalizeKeys =
+  | FlattenObjectKeys<Omit<TranslationDict, "supervisor">>
+  | `${string}`
+  | `panel.${string}`
+  | `state.${string}`
+  | `state_attributes.${string}`
+  | `state_badge.${string}`
+  | `ui.${string}`
+  | `component.${string}`;
+
+// Tweaked from https://www.raygesualdo.com/posts/flattening-object-keys-with-typescript-types
+export type FlattenObjectKeys<
+  T extends Record<string, any>,
+  Key extends keyof T = keyof T
+> = Key extends string
+  ? T[Key] extends Record<string, unknown>
+    ? `${Key}.${FlattenObjectKeys<T[Key]>}`
+    : `${Key}`
+  : never;
+
+export type LocalizeFunc<Keys extends string = LocalizeKeys> = (
+  key: Keys,
+  ...args: any[]
+) => string;
+
 interface FormatType {
   [format: string]: any;
 }
@@ -65,19 +92,19 @@ export const polyfillsLoaded =
  * }
  */
 
-export const computeLocalize = async (
+export const computeLocalize = async <Keys extends string = LocalizeKeys>(
   cache: any,
   language: string,
   resources: Resources,
   formats?: FormatsType
-): Promise<LocalizeFunc> => {
+): Promise<LocalizeFunc<Keys>> => {
   if (polyfillsLoaded) {
     await polyfillsLoaded;
   }
 
   await loadPolyfillLocales(language);
 
-  // Everytime any of the parameters change, invalidate the strings cache.
+  // Every time any of the parameters change, invalidate the strings cache.
   cache._localizationCache = {};
 
   return (key, ...args) => {

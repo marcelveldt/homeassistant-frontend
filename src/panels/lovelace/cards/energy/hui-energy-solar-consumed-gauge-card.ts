@@ -30,6 +30,8 @@ class HuiEnergySolarGaugeCard
 
   @state() private _data?: EnergyData;
 
+  protected hassSubscribeRequiredHostProps = ["_config"];
+
   public hassSubscribe(): UnsubscribeFunc[] {
     return [
       getEnergyDataCollection(this.hass!, {
@@ -155,6 +157,7 @@ class HuiEnergySolarGaugeCard
       ha-gauge {
         width: 100%;
         max-width: 250px;
+        direction: ltr;
       }
 
       .name {

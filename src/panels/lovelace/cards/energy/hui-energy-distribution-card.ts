@@ -24,10 +24,7 @@ import {
   getEnergyDataCollection,
   getEnergyGasUnit,
 } from "../../../../data/energy";
-import {
-  calculateStatisticsSumGrowth,
-  calculateStatisticsSumGrowthWithPercentage,
-} from "../../../../data/history";
+import { calculateStatisticsSumGrowth } from "../../../../data/history";
 import { SubscribeMixin } from "../../../../mixins/subscribe-mixin";
 import { HomeAssistant } from "../../../../types";
 import { LovelaceCard } from "../../types";
@@ -45,6 +42,8 @@ class HuiEnergyDistrubutionCard
   @state() private _config?: EnergyDistributionCardConfig;
 
   @state() private _data?: EnergyData;
+
+  protected hassSubscribeRequiredHostProps = ["_config"];
 
   public setConfig(config: EnergyDistributionCardConfig): void {
     this._config = config;
@@ -207,21 +206,13 @@ class HuiEnergyDistrubutionCard
     let homeHighCarbonCircumference: number | undefined;
 
     // This fallback is used in the demo
-    let electricityMapUrl = "https://www.electricitymap.org";
+    let electricityMapUrl = "https://app.electricitymap.org";
 
-    if (
-      this._data.co2SignalEntity &&
-      this._data.co2SignalEntity in this._data.stats
-    ) {
+    if (this._data.co2SignalEntity && this._data.fossilEnergyConsumption) {
       // Calculate high carbon consumption
-      const highCarbonEnergy = calculateStatisticsSumGrowthWithPercentage(
-        this._data.stats[this._data.co2SignalEntity],
-        types
-          .grid![0].flow_from.map(
-            (flow) => this._data!.stats[flow.stat_energy_from]
-          )
-          .filter(Boolean)
-      );
+      const highCarbonEnergy = Object.values(
+        this._data.fossilEnergyConsumption
+      ).reduce((sum, a) => sum + a, 0);
 
       const co2State = this.hass.states[this._data.co2SignalEntity];
 
@@ -285,7 +276,7 @@ class HuiEnergyDistrubutionCard
                           ? formatNumber(lowCarbonEnergy, this.hass.locale, {
                               maximumFractionDigits: 1,
                             })
-                          : "-"}
+                          : "—"}
                         kWh
                       </a>
                       <svg width="80" height="30">
@@ -324,7 +315,11 @@ class HuiEnergyDistrubutionCard
                         ${formatNumber(gasUsage || 0, this.hass.locale, {
                           maximumFractionDigits: 1,
                         })}
-                        ${getEnergyGasUnit(this.hass, prefs) || "m³"}
+                        ${getEnergyGasUnit(
+                          this.hass,
+                          prefs,
+                          this._data.statsMetadata
+                        ) || "m³"}
                       </div>
                       <svg width="80" height="30">
                         <path d="M40 0 v30" id="gas" />
@@ -494,8 +489,8 @@ class HuiEnergyDistrubutionCard
                       <ha-svg-icon
                         class="small"
                         .path=${mdiArrowUp}
-                      ></ha-svg-icon>
-                      ${formatNumber(totalBatteryOut || 0, this.hass.locale, {
+                      ></ha-svg-icon
+                      >${formatNumber(totalBatteryOut || 0, this.hass.locale, {
                         maximumFractionDigits: 1,
                       })}
                       kWh</span
@@ -702,8 +697,12 @@ class HuiEnergyDistrubutionCard
     :host {
       --mdc-icon-size: 24px;
     }
+    ha-card {
+      min-width: 210px;
+    }
     .card-content {
       position: relative;
+      direction: ltr;
     }
     .lines {
       position: absolute;

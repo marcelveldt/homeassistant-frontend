@@ -48,6 +48,8 @@ export class DialogAddUser extends LitElement {
 
   @state() private _isAdmin?: boolean;
 
+  @state() private _localOnly?: boolean;
+
   @state() private _allowChangeName = true;
 
   public showDialog(params: AddUserDialogParams) {
@@ -57,6 +59,7 @@ export class DialogAddUser extends LitElement {
     this._password = "";
     this._passwordConfirm = "";
     this._isAdmin = false;
+    this._localOnly = false;
     this._error = undefined;
     this._loading = false;
 
@@ -108,6 +111,7 @@ export class DialogAddUser extends LitElement {
                 .errorMessage=${this.hass.localize("ui.common.error_required")}
                 @value-changed=${this._handleValueChanged}
                 @blur=${this._maybePopulateUsername}
+                dialogInitialFocus
               ></paper-input>`
             : ""}
           <paper-input
@@ -122,6 +126,7 @@ export class DialogAddUser extends LitElement {
             autocapitalize="none"
             @value-changed=${this._handleValueChanged}
             .errorMessage=${this.hass.localize("ui.common.error_required")}
+            dialogInitialFocus
           ></paper-input>
 
           <paper-input
@@ -153,14 +158,32 @@ export class DialogAddUser extends LitElement {
               "ui.panel.config.users.add_user.password_not_match"
             )}
           ></paper-input>
-
-          <ha-formfield
-            .label=${this.hass.localize("ui.panel.config.users.editor.admin")}
-            .dir=${computeRTLDirection(this.hass)}
-          >
-            <ha-switch .checked=${this._isAdmin} @change=${this._adminChanged}>
-            </ha-switch>
-          </ha-formfield>
+          <div class="row">
+            <ha-formfield
+              .label=${this.hass.localize(
+                "ui.panel.config.users.editor.local_only"
+              )}
+              .dir=${computeRTLDirection(this.hass)}
+            >
+              <ha-switch
+                .checked=${this._localOnly}
+                @change=${this._localOnlyChanged}
+              >
+              </ha-switch>
+            </ha-formfield>
+          </div>
+          <div class="row">
+            <ha-formfield
+              .label=${this.hass.localize("ui.panel.config.users.editor.admin")}
+              .dir=${computeRTLDirection(this.hass)}
+            >
+              <ha-switch
+                .checked=${this._isAdmin}
+                @change=${this._adminChanged}
+              >
+              </ha-switch>
+            </ha-formfield>
+          </div>
           ${!this._isAdmin
             ? html`
                 <br />
@@ -218,6 +241,10 @@ export class DialogAddUser extends LitElement {
     this._isAdmin = ev.target.checked;
   }
 
+  private _localOnlyChanged(ev): void {
+    this._localOnly = ev.target.checked;
+  }
+
   private async _createUser(ev) {
     ev.preventDefault();
     if (!this._name || !this._username || !this._password) {
@@ -229,9 +256,12 @@ export class DialogAddUser extends LitElement {
 
     let user: User;
     try {
-      const userResponse = await createUser(this.hass, this._name, [
-        this._isAdmin ? SYSTEM_GROUP_ID_ADMIN : SYSTEM_GROUP_ID_USER,
-      ]);
+      const userResponse = await createUser(
+        this.hass,
+        this._name,
+        [this._isAdmin ? SYSTEM_GROUP_ID_ADMIN : SYSTEM_GROUP_ID_USER],
+        this._localOnly
+      );
       user = userResponse.user;
     } catch (err: any) {
       this._loading = false;
@@ -266,8 +296,9 @@ export class DialogAddUser extends LitElement {
           --mdc-dialog-max-width: 500px;
           --dialog-z-index: 10;
         }
-        ha-switch {
-          margin-top: 8px;
+        .row {
+          display: flex;
+          padding: 8px 0;
         }
       `,
     ];

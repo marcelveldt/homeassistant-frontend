@@ -27,6 +27,7 @@ import {
   mdiFormTextbox,
   mdiGasCylinder,
   mdiGauge,
+  mdiGestureTapButton,
   mdiGoogleAssistant,
   mdiGoogleCirclesCommunities,
   mdiHomeAssistant,
@@ -46,11 +47,10 @@ import {
   mdiRobotVacuum,
   mdiScriptText,
   mdiSineWave,
-  mdiTextToSpeech,
+  mdiMicrophoneMessage,
   mdiThermometer,
   mdiThermostat,
   mdiTimerOutline,
-  mdiToggleSwitchOutline,
   mdiVideo,
   mdiWaterPercent,
   mdiWeatherCloudy,
@@ -74,15 +74,16 @@ export const FIXED_DOMAIN_ICONS = {
   camera: mdiVideo,
   climate: mdiThermostat,
   configurator: mdiCog,
-  conversation: mdiTextToSpeech,
+  conversation: mdiMicrophoneMessage,
   counter: mdiCounter,
+  demo: mdiHomeAssistant,
   fan: mdiFan,
   google_assistant: mdiGoogleAssistant,
   group: mdiGoogleCirclesCommunities,
   homeassistant: mdiHomeAssistant,
   homekit: mdiHomeAutomation,
   image_processing: mdiImageFilterFrames,
-  input_boolean: mdiToggleSwitchOutline,
+  input_button: mdiGestureTapButton,
   input_datetime: mdiCalendarClock,
   input_number: mdiRayVertex,
   input_select: mdiFormatListBulleted,
@@ -112,6 +113,7 @@ export const FIXED_DOMAIN_ICONS = {
 };
 
 export const FIXED_DEVICE_CLASS_ICONS = {
+  apparent_power: mdiFlash,
   aqi: mdiAirFilter,
   // battery: mdiBattery, => not included by design since `sensorIcon()` will dynamically determine the icon
   carbon_dioxide: mdiMoleculeCo2,
@@ -134,6 +136,7 @@ export const FIXED_DEVICE_CLASS_ICONS = {
   power: mdiFlash,
   power_factor: mdiAngleAcute,
   pressure: mdiGauge,
+  reactive_power: mdiFlash,
   signal_strength: mdiWifi,
   sulphur_dioxide: mdiMolecule,
   temperature: mdiThermometer,
@@ -148,6 +151,7 @@ export const DOMAINS_WITH_CARD = [
   "climate",
   "cover",
   "configurator",
+  "input_button",
   "input_select",
   "input_number",
   "input_text",
@@ -181,25 +185,60 @@ export const DOMAINS_WITH_MORE_INFO = [
   "person",
   "remote",
   "script",
+  "scene",
   "sun",
   "timer",
+  "update",
   "vacuum",
   "water_heater",
   "weather",
 ];
 
-/** Domains that show no more info dialog. */
-export const DOMAINS_HIDE_MORE_INFO = [
+/** Domains that do not show the default more info dialog content (e.g. the attribute section)
+ *  and do not have a separate more info (so not in DOMAINS_WITH_MORE_INFO). */
+export const DOMAINS_HIDE_DEFAULT_MORE_INFO = [
   "input_number",
   "input_select",
   "input_text",
   "number",
   "scene",
+  "update",
   "select",
 ];
 
+/** Domains that render an input element instead of a text value when displayed in a row.
+ *  Those rows should then not show a cursor pointer when hovered (which would normally
+ *  be the default) unless the element itself enforces it (e.g. a button). Also those elements
+ *  should not act as a click target to open the more info dialog (the row name and state icon
+ *  still do of course) as the click should instead e.g. activate the input field  or toggle
+ *  the button that this row shows.
+ */
+export const DOMAINS_INPUT_ROW = [
+  "automation",
+  "button",
+  "cover",
+  "fan",
+  "group",
+  "humidifier",
+  "input_boolean",
+  "input_button",
+  "input_datetime",
+  "input_number",
+  "input_select",
+  "input_text",
+  "light",
+  "lock",
+  "media_player",
+  "number",
+  "scene",
+  "script",
+  "select",
+  "switch",
+  "vacuum",
+];
+
 /** Domains that should have the history hidden in the more info dialog. */
-export const DOMAINS_MORE_INFO_NO_HISTORY = ["camera", "configurator", "scene"];
+export const DOMAINS_MORE_INFO_NO_HISTORY = ["camera", "configurator"];
 
 /** States that we consider "off". */
 export const STATES_OFF = ["closed", "locked", "off"];
