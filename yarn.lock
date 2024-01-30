@@ -1612,6 +1612,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fullcalendar/common@npm:~5.11.5":
+  version: 5.11.5
+  resolution: "@fullcalendar/common@npm:5.11.5"
+  dependencies:
+    tslib: ^2.1.0
+  checksum: 18781fa511c2493a61e73c42039f62afbe5c0756f3ea25f95ce293d1d7cb6e63893b9d549491f6cdedacc4a0ea039cb3120d15cdb572ed1887a36eab774f338f
+  languageName: node
+  linkType: hard
+
 "@fullcalendar/core@npm:^5.11.4":
   version: 5.11.4
   resolution: "@fullcalendar/core@npm:5.11.4"
@@ -1643,13 +1652,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fullcalendar/list@npm:^5.11.4":
-  version: 5.11.4
-  resolution: "@fullcalendar/list@npm:5.11.4"
+"@fullcalendar/list@npm:^5.11.5":
+  version: 5.11.5
+  resolution: "@fullcalendar/list@npm:5.11.5"
   dependencies:
-    "@fullcalendar/common": ~5.11.4
+    "@fullcalendar/common": ~5.11.5
     tslib: ^2.1.0
-  checksum: e2cec5e89c57836a9ca4db57fbe67e16f78d91191df39ac0b5d0f18c1fdac9763f04647ae42e5f2d31ffa3cd245423d3aec449ed6c84fafc0195e62079a4eedc
+  checksum: fb6e40197a544ca61e7e93ff2950c45f1caa4a4f842900b0ded20060f11b3bb2b8c1ee4c0b841e434d31dcab49251b6edf5b42652cd6a415f45977b53fd5ded3
   languageName: node
   linkType: hard
 
@@ -9396,7 +9405,7 @@ fsevents@^1.2.7:
     "@fullcalendar/core": ^5.11.4
     "@fullcalendar/daygrid": ^5.11.4
     "@fullcalendar/interaction": ^5.11.4
-    "@fullcalendar/list": ^5.11.4
+    "@fullcalendar/list": ^5.11.5
     "@fullcalendar/timegrid": ^5.11.4
     "@koa/cors": ^4.0.0
     "@lezer/highlight": ^1.1.3
