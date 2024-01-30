@@ -1933,6 +1933,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@lit-labs/ssr-dom-shim@npm:^1.1.2":
+  version: 1.1.2
+  resolution: "@lit-labs/ssr-dom-shim@npm:1.1.2"
+  checksum: 73fd787893851d4ec4aaa5c775405ed2aae4ca0891b2dd3c973b32c2f4bf70ada5481dd0224e52b786d037aa8a00052186ad1623c44551affd66f6409cca8da6
+  languageName: node
+  linkType: hard
+
 "@lit-labs/virtualizer@npm:^1.0.1":
   version: 1.0.1
   resolution: "@lit-labs/virtualizer@npm:1.0.1"
@@ -1950,6 +1957,15 @@ __metadata:
   dependencies:
     "@lit-labs/ssr-dom-shim": ^1.0.0
   checksum: fab0bcfdade9c26af2ad5115fb564bcf8ba0732a3a8be86c157851c2771e3fdc65ab38f2cd60fa121946058bf6e487461fd217f87b01f96e88ee7a95d5d866ba
+  languageName: node
+  linkType: hard
+
+"@lit/reactive-element@npm:^2.0.0":
+  version: 2.0.3
+  resolution: "@lit/reactive-element@npm:2.0.3"
+  dependencies:
+    "@lit-labs/ssr-dom-shim": ^1.1.2
+  checksum: 0da8311bfbe025670f098496a55a727db47fd99443d4d43dbf343f3a6087d92bcf506df5167b036ad1effe1a159ebf24dc5bd2c5f9eb532ee00fc6db5d549037
   languageName: node
   linkType: hard
 
@@ -4772,7 +4788,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@vaadin/vaadin-themable-mixin@npm:^23.3.6, @vaadin/vaadin-themable-mixin@npm:~23.3.6":
+"@vaadin/vaadin-themable-mixin@npm:^24.3.4":
+  version: 24.3.4
+  resolution: "@vaadin/vaadin-themable-mixin@npm:24.3.4"
+  dependencies:
+    "@open-wc/dedupe-mixin": ^1.3.0
+    lit: ^3.0.0
+  checksum: de7ba19877fc06d9a8496e14df58176650dd377bf17a0103c9d11548c388ab81aafbc5798ac1d0667e56c9c08e29ee5cb3717f4f439ebcae07b335ad7b5e1f0b
+  languageName: node
+  linkType: hard
+
+"@vaadin/vaadin-themable-mixin@npm:~23.3.6":
   version: 23.3.6
   resolution: "@vaadin/vaadin-themable-mixin@npm:23.3.6"
   dependencies:
@@ -9467,7 +9493,7 @@ fsevents@^1.2.7:
     "@typescript-eslint/eslint-plugin": ^5.46.1
     "@typescript-eslint/parser": ^5.49.0
     "@vaadin/combo-box": ^23.3.6
-    "@vaadin/vaadin-themable-mixin": ^23.3.6
+    "@vaadin/vaadin-themable-mixin": ^24.3.4
     "@vibrant/color": ^3.2.1-alpha.1
     "@vibrant/core": ^3.2.1-alpha.1
     "@vibrant/quantizer-mmcq": ^3.2.1-alpha.1
@@ -11127,12 +11153,32 @@ fsevents@^1.2.7:
   languageName: node
   linkType: hard
 
+"lit-element@npm:^4.0.0":
+  version: 4.0.3
+  resolution: "lit-element@npm:4.0.3"
+  dependencies:
+    "@lit-labs/ssr-dom-shim": ^1.1.2
+    "@lit/reactive-element": ^2.0.0
+    lit-html: ^3.1.0
+  checksum: 78e7789c33bdedca6a9d9883976b597e0cb9826e10b24fbf6874df41a96d855bd264aa037998d8b450775285f206887c5b205a6311c325a3bebeb2f829f2e5ea
+  languageName: node
+  linkType: hard
+
 "lit-html@npm:^2.2.0, lit-html@npm:^2.6.0":
   version: 2.6.1
   resolution: "lit-html@npm:2.6.1"
   dependencies:
     "@types/trusted-types": ^2.0.2
   checksum: 32291eb5bcaa7fcc1d433522a9a62c3c3d240e49bb8c57ccea5c10014823d94f62f17e2d5361781cb6ee0b3c9078ef839de6164d5374371d650471904515e48e
+  languageName: node
+  linkType: hard
+
+"lit-html@npm:^3.1.0":
+  version: 3.1.1
+  resolution: "lit-html@npm:3.1.1"
+  dependencies:
+    "@types/trusted-types": ^2.0.2
+  checksum: 66dba5a736b426e6d202a2145018b8ae2cf1e0b1399dec2239f43c9ec5505b55e9bfda34b93baffa9c5f05837227248054530741f8705f8cadca989687787a1f
   languageName: node
   linkType: hard
 
@@ -11155,6 +11201,17 @@ fsevents@^1.2.7:
     lit-element: ^3.2.0
     lit-html: ^2.6.0
   checksum: 74f2813152a48f195784f01b6b4ff7e4e7d8fa90ac272b725d1953fa3e1d6c9dca60b77da435f34144fcdd38705480889a8ea986835676932a8559c897cea517
+  languageName: node
+  linkType: hard
+
+"lit@npm:^3.0.0":
+  version: 3.1.1
+  resolution: "lit@npm:3.1.1"
+  dependencies:
+    "@lit/reactive-element": ^2.0.0
+    lit-element: ^4.0.0
+    lit-html: ^3.1.0
+  checksum: 1c145e074f89483b5115a200b6963e75eb180393856bdb2eb5641fb5641e086e41a132f97478c5a1e5a88fc243a11a5306c1dbed64f51853f7833a65e21d4534
   languageName: node
   linkType: hard
 
