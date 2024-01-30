@@ -3105,10 +3105,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@mdi/svg@npm:7.1.96":
-  version: 7.1.96
-  resolution: "@mdi/svg@npm:7.1.96"
-  checksum: afbb0947cbf342ffb08d9b0069095db5e4d9a5dab741457eac2a0a8433217834bb96589be26b8abbf4ac315473870e07a14b0b759b5148efeedad193067ab67c
+"@mdi/svg@npm:7.4.47":
+  version: 7.4.47
+  resolution: "@mdi/svg@npm:7.4.47"
+  checksum: 4f474d9a9816e866cdaa4e0990faf2bf441707ec427ce3435813297b98f07eb303e9774ac1e62cb85a7904c0933903ebe9a3e762cf1a890fa6e235ae8f35ff1d
   languageName: node
   linkType: hard
 
@@ -9427,7 +9427,7 @@ fsevents@^1.2.7:
     "@material/mwc-top-app-bar-fixed": ^0.27.0
     "@material/top-app-bar": =14.0.0-canary.53b3cad2f.0
     "@mdi/js": 7.1.96
-    "@mdi/svg": 7.1.96
+    "@mdi/svg": 7.4.47
     "@octokit/auth-oauth-device": ^4.0.4
     "@octokit/rest": ^19.0.7
     "@open-wc/dev-server-hmr": ^0.1.3
