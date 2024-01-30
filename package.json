@@ -199,7 +199,7 @@
     "eslint-plugin-wc": "^1.4.0",
     "fancy-log": "^2.0.0",
     "fs-extra": "^11.1.0",
-    "glob": "^8.1.0",
+    "glob": "^10.3.10",
     "gulp": "^4.0.2",
     "gulp-flatmap": "^1.0.2",
     "gulp-json-transform": "^0.4.6",
