@@ -1,4 +1,4 @@
-import { html, LitElement, TemplateResult } from "lit";
+import { html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../../common/dom/fire_event";
@@ -6,10 +6,11 @@ import { slugify } from "../../../../common/string/slugify";
 import type { LocalizeFunc } from "../../../../common/translations/localize";
 import "../../../../components/ha-form/ha-form";
 import type { SchemaUnion } from "../../../../components/ha-form/types";
-import type { LovelaceViewConfig } from "../../../../data/lovelace";
+import { LovelaceViewConfig } from "../../../../data/lovelace/config/view";
 import type { HomeAssistant } from "../../../../types";
 import {
   DEFAULT_VIEW_LAYOUT,
+  SECTION_VIEW_LAYOUT,
   PANEL_VIEW_LAYOUT,
   SIDEBAR_VIEW_LAYOUT,
 } from "../../views/const";
@@ -26,7 +27,7 @@ declare global {
 export class HuiViewEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ type: Boolean }) public isNew!: boolean;
+  @property({ type: Boolean }) public isNew = false;
 
   @state() private _config!: LovelaceViewConfig;
 
@@ -53,6 +54,7 @@ export class HuiViewEditor extends LitElement {
                   DEFAULT_VIEW_LAYOUT,
                   SIDEBAR_VIEW_LAYOUT,
                   PANEL_VIEW_LAYOUT,
+                  SECTION_VIEW_LAYOUT,
                 ] as const
               ).map((type) => ({
                 value: type,
@@ -85,15 +87,14 @@ export class HuiViewEditor extends LitElement {
       : this._config.type || DEFAULT_VIEW_LAYOUT;
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this.hass) {
-      return html``;
+      return nothing;
     }
 
     const schema = this._schema(this.hass.localize);
 
     const data = {
-      theme: "Backend-selected",
       ...this._config,
       type: this._type,
     };

@@ -1,47 +1,47 @@
 import type { SelectedDetail } from "@material/mwc-list";
 import { formatInTimeZone, toDate } from "date-fns-tz";
-import { css, html, LitElement, PropertyValues } from "lit";
+import { LitElement, PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
-import { classMap } from "lit/directives/class-map";
 import type { Options, WeekdayStr } from "rrule";
 import { ByWeekday, RRule, Weekday } from "rrule";
 import { firstWeekdayIndex } from "../../common/datetime/first_weekday";
 import { stopPropagation } from "../../common/dom/stop_propagation";
 import { LocalizeKeys } from "../../common/translations/localize";
-import "../../components/ha-chip";
+import "../../components/chips/ha-chip-set";
+import "../../components/chips/ha-filter-chip";
+import "../../components/ha-date-input";
 import "../../components/ha-list-item";
 import "../../components/ha-select";
 import type { HaSelect } from "../../components/ha-select";
 import "../../components/ha-textfield";
 import { HomeAssistant } from "../../types";
 import {
-  convertFrequency,
-  convertRepeatFrequency,
   DEFAULT_COUNT,
-  getWeekday,
-  getWeekdays,
-  getMonthlyRepeatItems,
+  MonthlyRepeatItem,
   RepeatEnd,
   RepeatFrequency,
+  convertFrequency,
+  convertRepeatFrequency,
+  getMonthdayRepeatFromRule,
+  getMonthlyRepeatItems,
+  getMonthlyRepeatWeekdayFromRule,
+  getWeekday,
+  getWeekdays,
   ruleByWeekDay,
   untilValue,
-  MonthlyRepeatItem,
-  getMonthlyRepeatWeekdayFromRule,
-  getMonthdayRepeatFromRule,
 } from "./recurrence";
-import "../../components/ha-date-input";
 
 @customElement("ha-recurrence-rule-editor")
 export class RecurrenceRuleEditor extends LitElement {
-  @property() public hass!: HomeAssistant;
+  @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property() public disabled = false;
+  @property({ type: Boolean }) public disabled = false;
 
   @property() public value = "";
 
-  @property() public dtstart?: Date;
+  @property({ attribute: false }) public dtstart?: Date;
 
-  @property() public allDay?: boolean;
+  @property({ type: Boolean }) public allDay = false;
 
   @property({ attribute: false }) public locale!: HomeAssistant["locale"];
 
@@ -233,29 +233,31 @@ export class RecurrenceRuleEditor extends LitElement {
               `
             )}
           </ha-select>`
-        : html``}
+        : nothing}
     `;
   }
 
   renderWeekly() {
     return html`
       ${this.renderInterval()}
-      <div class="weekdays">
+      <ha-chip-set class="weekdays">
         ${this._allWeekdays!.map(
           (item) => html`
-            <ha-chip
+            <ha-filter-chip
+              no-leading-icon
               .value=${item}
-              class=${classMap({ active: this._weekday.has(item) })}
+              .selected=${this._weekday.has(item)}
               @click=${this._onWeekdayToggle}
-              >${this.hass.localize(
+              .label=${this.hass.localize(
                 `ui.components.calendar.event.repeat.weekly.weekday.${
                   item.toLowerCase() as Lowercase<WeekdayStr>
                 }`
-              )}</ha-chip
+              )}
             >
+            </ha-filter-chip>
           `
         )}
-      </div>
+      </ha-chip-set>
     `;
   }
 
@@ -321,7 +323,7 @@ export class RecurrenceRuleEditor extends LitElement {
               @change=${this._onCountChange}
             ></ha-textfield>
           `
-        : html``}
+        : nothing}
       ${this._end === "on"
         ? html`
             <ha-date-input
@@ -334,17 +336,17 @@ export class RecurrenceRuleEditor extends LitElement {
               @value-changed=${this._onUntilChange}
             ></ha-date-input>
           `
-        : html``}
+        : nothing}
     `;
   }
 
   render() {
     return html`
       ${this.renderRepeat()}
-      ${this._freq === "monthly" ? this.renderMonthly() : html``}
-      ${this._freq === "weekly" ? this.renderWeekly() : html``}
-      ${this._freq === "daily" ? this.renderDaily() : html``}
-      ${this._freq !== "none" ? this.renderEnd() : html``}
+      ${this._freq === "monthly" ? this.renderMonthly() : nothing}
+      ${this._freq === "weekly" ? this.renderWeekly() : nothing}
+      ${this._freq === "daily" ? this.renderDaily() : nothing}
+      ${this._freq !== "none" ? this.renderEnd() : nothing}
     `;
   }
 
@@ -379,10 +381,10 @@ export class RecurrenceRuleEditor extends LitElement {
   private _onWeekdayToggle(e: MouseEvent) {
     const target = e.currentTarget as any;
     const value = target.value as WeekdayStr;
-    if (!target.classList.contains("active")) {
-      this._weekday.add(value);
-    } else {
+    if (this._weekday.has(value)) {
       this._weekday.delete(value);
+    } else {
+      this._weekday.add(value);
     }
     this.requestUpdate("_weekday");
   }
@@ -504,19 +506,12 @@ export class RecurrenceRuleEditor extends LitElement {
       margin-bottom: 16px;
     }
     .weekdays {
-      display: flex;
-      justify-content: space-between;
       margin-bottom: 16px;
     }
     ha-textfield:last-child,
     ha-select:last-child,
     .weekdays:last-child {
       margin-bottom: 0;
-    }
-
-    .active {
-      --ha-chip-background-color: var(--primary-color);
-      --ha-chip-text-color: var(--text-primary-color);
     }
   `;
 }

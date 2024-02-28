@@ -9,6 +9,7 @@ import "../../../../../components/ha-form/ha-form";
 import type { SchemaUnion } from "../../../../../components/ha-form/types";
 import type { NumericStateTrigger } from "../../../../../data/automation";
 import type { HomeAssistant } from "../../../../../types";
+import { ensureArray } from "../../../../../common/array/ensure-array";
 
 @customElement("ha-automation-trigger-numeric_state")
 export class HaNumericStateTrigger extends LitElement {
@@ -25,31 +26,40 @@ export class HaNumericStateTrigger extends LitElement {
   private _schema = memoizeOne(
     (
       localize: LocalizeFunc,
-      entityId,
+      entityId: string | string[],
       inputAboveIsEntity?: boolean,
       inputBelowIsEntity?: boolean
     ) =>
       [
-        { name: "entity_id", required: true, selector: { entity: {} } },
+        {
+          name: "entity_id",
+          required: true,
+          selector: { entity: { multiple: true } },
+        },
         {
           name: "attribute",
           selector: {
             attribute: {
-              entity_id: entityId,
+              entity_id: entityId ? entityId[0] : undefined,
               hide_attributes: [
                 "access_token",
                 "auto_update",
                 "available_modes",
                 "away_mode",
                 "changed_by",
+                "code_arm_required",
                 "code_format",
+                "color_mode",
                 "color_modes",
                 "current_activity",
                 "device_class",
                 "editable",
                 "effect_list",
                 "effect",
+                "entity_id",
                 "entity_picture",
+                "event_type",
+                "event_types",
                 "fan_mode",
                 "fan_modes",
                 "fan_speed_list",
@@ -62,11 +72,20 @@ export class HaNumericStateTrigger extends LitElement {
                 "hvac_mode",
                 "hvac_modes",
                 "icon",
+                "id",
+                "latest_version",
+                "max_color_temp_kelvin",
+                "max_mireds",
+                "max_temp",
                 "media_album_name",
                 "media_artist",
                 "media_content_type",
                 "media_position_updated_at",
                 "media_title",
+                "min_color_temp_kelvin",
+                "min_mireds",
+                "min_temp",
+                "mode",
                 "next_dawn",
                 "next_dusk",
                 "next_midnight",
@@ -76,8 +95,11 @@ export class HaNumericStateTrigger extends LitElement {
                 "operation_list",
                 "operation_mode",
                 "options",
+                "percentage_step",
+                "precipitation_unit",
                 "preset_mode",
                 "preset_modes",
+                "pressure_unit",
                 "release_notes",
                 "release_summary",
                 "release_url",
@@ -85,19 +107,27 @@ export class HaNumericStateTrigger extends LitElement {
                 "rgb_color",
                 "rgbw_color",
                 "shuffle",
+                "skipped_version",
                 "sound_mode_list",
                 "sound_mode",
                 "source_list",
                 "source_type",
                 "source",
                 "state_class",
+                "step",
+                "supported_color_modes",
                 "supported_features",
                 "swing_mode",
-                "swing_mode",
                 "swing_modes",
+                "target_temp_step",
+                "temperature_unit",
                 "title",
                 "token",
                 "unit_of_measurement",
+                "user_id",
+                "uuid",
+                "visibility_unit",
+                "wind_speed_unit",
                 "xy_color",
               ],
             },
@@ -209,7 +239,7 @@ export class HaNumericStateTrigger extends LitElement {
 
   public static get defaultConfig() {
     return {
-      entity_id: "",
+      entity_id: [],
     };
   }
 
@@ -240,6 +270,7 @@ export class HaNumericStateTrigger extends LitElement {
       mode_above: inputAboveIsEntity ? "input" : "value",
       mode_below: inputBelowIsEntity ? "input" : "value",
       ...this.trigger,
+      entity_id: ensureArray(this.trigger.entity_id),
       for: trgFor,
     };
 
@@ -264,6 +295,10 @@ export class HaNumericStateTrigger extends LitElement {
 
     delete newTrigger.mode_above;
     delete newTrigger.mode_below;
+
+    if (newTrigger.value_template === "") {
+      delete newTrigger.value_template;
+    }
 
     fireEvent(this, "value-changed", { value: newTrigger });
   }

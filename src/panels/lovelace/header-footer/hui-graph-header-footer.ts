@@ -1,17 +1,17 @@
 import { HassEntity } from "home-assistant-js-websocket";
 import {
-  css,
   CSSResultGroup,
-  html,
   LitElement,
   PropertyValues,
-  TemplateResult,
+  css,
+  html,
+  nothing,
 } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import "../../../components/ha-circular-progress";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
-import { subscribeHistoryStatesTimeWindow } from "../../../data/history";
 import { computeDomain } from "../../../common/entity/compute_domain";
+import "../../../components/ha-circular-progress";
+import { subscribeHistoryStatesTimeWindow } from "../../../data/history";
 import { HomeAssistant } from "../../../types";
 import { findEntities } from "../common/find-entities";
 import { coordinatesMinimalResponseCompressedState } from "../common/graph/coordinates";
@@ -62,7 +62,7 @@ export class HuiGraphHeaderFooter
 
   @property() public type!: "header" | "footer";
 
-  @property() protected _config?: GraphHeaderFooterConfig;
+  @state() protected _config?: GraphHeaderFooterConfig;
 
   @state() private _coordinates?: number[][];
 
@@ -99,9 +99,9 @@ export class HuiGraphHeaderFooter
     this._config = cardConfig;
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this._config || !this.hass) {
-      return html``;
+      return nothing;
     }
 
     if (this._error) {
@@ -111,7 +111,10 @@ export class HuiGraphHeaderFooter
     if (!this._coordinates) {
       return html`
         <div class="container">
-          <ha-circular-progress active size="small"></ha-circular-progress>
+          <ha-circular-progress
+            indeterminate
+            size="small"
+          ></ha-circular-progress>
         </div>
       `;
     }
@@ -131,7 +134,7 @@ export class HuiGraphHeaderFooter
 
   public connectedCallback() {
     super.connectedCallback();
-    if (this.hasUpdated) {
+    if (this.hasUpdated && this._config) {
       this._subscribeHistory();
     }
   }
@@ -142,27 +145,31 @@ export class HuiGraphHeaderFooter
   }
 
   private _subscribeHistory() {
-    if (!isComponentLoaded(this.hass!, "history") || this._subscribed) {
+    if (
+      !isComponentLoaded(this.hass!, "history") ||
+      this._subscribed ||
+      !this._config
+    ) {
       return;
     }
     this._subscribed = subscribeHistoryStatesTimeWindow(
       this.hass!,
       (combinedHistory) => {
-        if (!this._subscribed) {
+        if (!this._subscribed || !this._config) {
           // Message came in before we had a chance to unload
           return;
         }
         this._coordinates =
           coordinatesMinimalResponseCompressedState(
-            combinedHistory[this._config!.entity],
-            this._config!.hours_to_show!,
+            combinedHistory[this._config.entity],
+            this._config.hours_to_show!,
             500,
-            this._config!.detail!,
-            this._config!.limits
+            this._config.detail!,
+            this._config.limits
           ) || [];
       },
-      this._config!.hours_to_show!,
-      [this._config!.entity]
+      this._config.hours_to_show!,
+      [this._config.entity]
     ).catch((err) => {
       this._subscribed = undefined;
       this._error = err;

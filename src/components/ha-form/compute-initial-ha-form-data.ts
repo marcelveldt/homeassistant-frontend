@@ -27,7 +27,8 @@ export const computeInitialHaFormData = (
       data[field.name] = 0.0;
     } else if (field.type === "select") {
       if (field.options.length) {
-        data[field.name] = field.options[0][0];
+        const val = field.options[0];
+        data[field.name] = Array.isArray(val) ? val[0] : val;
       }
     } else if (field.type === "positive_time_period_dict") {
       data[field.name] = {
@@ -47,19 +48,28 @@ export const computeInitialHaFormData = (
       } else if ("boolean" in selector) {
         data[field.name] = false;
       } else if (
-        "text" in selector ||
         "addon" in selector ||
         "attribute" in selector ||
         "file" in selector ||
         "icon" in selector ||
-        "theme" in selector
+        "template" in selector ||
+        "text" in selector ||
+        "theme" in selector ||
+        "object" in selector
       ) {
         data[field.name] = "";
       } else if ("number" in selector) {
         data[field.name] = selector.number?.min ?? 0;
       } else if ("select" in selector) {
         if (selector.select?.options.length) {
-          data[field.name] = selector.select.options[0][0];
+          const firstOption = selector.select.options[0];
+          const val =
+            typeof firstOption === "string" ? firstOption : firstOption.value;
+          data[field.name] = selector.select.multiple ? [val] : val;
+        }
+      } else if ("country" in selector) {
+        if (selector.country?.countries?.length) {
+          data[field.name] = selector.country.countries[0];
         }
       } else if ("duration" in selector) {
         data[field.name] = {
@@ -71,7 +81,7 @@ export const computeInitialHaFormData = (
         data[field.name] = "00:00:00";
       } else if ("date" in selector || "datetime" in selector) {
         const now = new Date().toISOString().slice(0, 10);
-        data[field.name] = `${now} 00:00:00`;
+        data[field.name] = `${now}T00:00:00`;
       } else if ("color_rgb" in selector) {
         data[field.name] = [0, 0, 0];
       } else if ("color_temp" in selector) {

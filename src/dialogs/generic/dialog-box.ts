@@ -1,6 +1,6 @@
 import "@material/mwc-button/mwc-button";
 import { mdiAlertOutline } from "@mdi/js";
-import { css, CSSResultGroup, html, LitElement, TemplateResult } from "lit";
+import { css, CSSResultGroup, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
@@ -35,9 +35,9 @@ class DialogBox extends LitElement {
     return true;
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this._params) {
-      return html``;
+      return nothing;
     }
 
     const confirmPrompt = this._params.confirmation || this._params.prompt;
@@ -74,20 +74,27 @@ class DialogBox extends LitElement {
                 <ha-textfield
                   dialogInitialFocus
                   value=${ifDefined(this._params.defaultValue)}
-                  .placeholder=${ifDefined(this._params.placeholder)}
+                  .placeholder=${this._params.placeholder}
                   .label=${this._params.inputLabel
                     ? this._params.inputLabel
                     : ""}
                   .type=${this._params.inputType
                     ? this._params.inputType
                     : "text"}
+                  .min=${this._params.inputMin}
+                  .max=${this._params.inputMax}
                 ></ha-textfield>
               `
             : ""}
         </div>
         ${confirmPrompt &&
         html`
-          <mwc-button @click=${this._dismiss} slot="secondaryAction">
+          <mwc-button
+            @click=${this._dismiss}
+            slot="secondaryAction"
+            ?dialogInitialFocus=${!this._params.prompt &&
+            this._params.destructive}
+          >
             ${this._params.dismissText
               ? this._params.dismissText
               : this.hass.localize("ui.dialogs.generic.cancel")}
@@ -95,7 +102,8 @@ class DialogBox extends LitElement {
         `}
         <mwc-button
           @click=${this._confirm}
-          ?dialogInitialFocus=${!this._params.prompt}
+          ?dialogInitialFocus=${!this._params.prompt &&
+          !this._params.destructive}
           slot="primaryAction"
           class=${classMap({
             destructive: this._params.destructive || false,
@@ -161,8 +169,6 @@ class DialogBox extends LitElement {
         --mdc-theme-primary: var(--error-color);
       }
       ha-dialog {
-        --mdc-dialog-heading-ink-color: var(--primary-text-color);
-        --mdc-dialog-content-ink-color: var(--primary-text-color);
         /* Place above other dialogs */
         --dialog-z-index: 104;
       }

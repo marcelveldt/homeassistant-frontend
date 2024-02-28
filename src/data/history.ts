@@ -1,4 +1,5 @@
 import {
+  HassConfig,
   HassEntities,
   HassEntity,
   HassEntityAttributeBase,
@@ -28,6 +29,8 @@ const LINE_ATTRIBUTES_TO_KEEP = [
   "hvac_action",
   "humidity",
   "mode",
+  "action",
+  "current_humidity",
 ];
 
 export interface LineChartState {
@@ -41,10 +44,12 @@ export interface LineChartEntity {
   name: string;
   entity_id: string;
   states: LineChartState[];
+  statistics?: LineChartState[];
 }
 
 export interface LineChartUnit {
   unit: string;
+  device_class?: string;
   identifier: string;
   data: LineChartEntity[];
 }
@@ -117,7 +122,7 @@ export const fetchDateWS = (
 
 export const subscribeHistory = (
   hass: HomeAssistant,
-  callbackFunction: (message: HistoryStreamMessage) => void,
+  callbackFunction: (data: HistoryStates) => void,
   startTime: Date,
   endTime: Date,
   entityIds: string[]
@@ -132,8 +137,9 @@ export const subscribeHistory = (
       entityIdHistoryNeedsAttributes(hass, entityId)
     ),
   };
+  const stream = new HistoryStream(hass);
   return hass.connection.subscribeMessage<HistoryStreamMessage>(
-    (message) => callbackFunction(message),
+    (message) => callbackFunction(stream.processMessage(message)),
     params
   );
 };
@@ -141,11 +147,11 @@ export const subscribeHistory = (
 class HistoryStream {
   hass: HomeAssistant;
 
-  hoursToShow: number;
+  hoursToShow?: number;
 
   combinedHistory: HistoryStates;
 
-  constructor(hass: HomeAssistant, hoursToShow: number) {
+  constructor(hass: HomeAssistant, hoursToShow?: number) {
     this.hass = hass;
     this.hoursToShow = hoursToShow;
     this.combinedHistory = {};
@@ -161,8 +167,9 @@ class HistoryStream {
       // indicate no more historical events
       return this.combinedHistory;
     }
-    const purgeBeforePythonTime =
-      (new Date().getTime() - 60 * 60 * this.hoursToShow * 1000) / 1000;
+    const purgeBeforePythonTime = this.hoursToShow
+      ? (new Date().getTime() - 60 * 60 * this.hoursToShow * 1000) / 1000
+      : undefined;
     const newHistory: HistoryStates = {};
     for (const entityId of Object.keys(this.combinedHistory)) {
       newHistory[entityId] = [];
@@ -195,7 +202,7 @@ class HistoryStream {
         newHistory[entityId] = streamMessage.states[entityId];
       }
       // Remove old history
-      if (entityId in this.combinedHistory) {
+      if (purgeBeforePythonTime && entityId in this.combinedHistory) {
         const expiredStates = newHistory[entityId].filter(
           (state) => state.lu < purgeBeforePythonTime
         );
@@ -230,7 +237,8 @@ export const subscribeHistoryStatesTimeWindow = (
   hoursToShow: number,
   entityIds: string[],
   minimalResponse = true,
-  significantChangesOnly = true
+  significantChangesOnly = true,
+  noAttributes?: boolean
 ): Promise<() => Promise<void>> => {
   const params = {
     type: "history/stream",
@@ -240,9 +248,11 @@ export const subscribeHistoryStatesTimeWindow = (
     ).toISOString(),
     minimal_response: minimalResponse,
     significant_changes_only: significantChangesOnly,
-    no_attributes: !entityIds.some((entityId) =>
-      entityIdHistoryNeedsAttributes(hass, entityId)
-    ),
+    no_attributes:
+      noAttributes ??
+      !entityIds.some((entityId) =>
+        entityIdHistoryNeedsAttributes(hass, entityId)
+      ),
   };
   const stream = new HistoryStream(hass, hoursToShow);
   return hass.connection.subscribeMessage<HistoryStreamMessage>(
@@ -264,7 +274,8 @@ const equalState = (obj1: LineChartState, obj2: LineChartState) =>
 
 const processTimelineEntity = (
   localize: LocalizeFunc,
-  language: FrontendLocaleData,
+  locale: FrontendLocaleData,
+  config: HassConfig,
   entities: HomeAssistant["entities"],
   entityId: string,
   states: EntityHistoryState[],
@@ -285,8 +296,9 @@ const processTimelineEntity = (
     data.push({
       state_localize: computeStateDisplayFromEntityAttributes(
         localize,
-        language,
-        entities,
+        locale,
+        config,
+        entities[entityId],
         entityId,
         {
           ...(state.a || first.a),
@@ -312,7 +324,8 @@ const processTimelineEntity = (
 };
 
 const processLineChartEntities = (
-  unit,
+  unit: string,
+  device_class: string | undefined,
   entities: HistoryStates,
   hassEntities: HassEntities
 ): LineChartUnit => {
@@ -367,8 +380,8 @@ const processLineChartEntities = (
       entityId in hassEntities
         ? hassEntities[entityId].attributes
         : "friendly_name" in first.a
-        ? first.a
-        : undefined;
+          ? first.a
+          : undefined;
 
     data.push({
       domain,
@@ -380,21 +393,35 @@ const processLineChartEntities = (
 
   return {
     unit,
+    device_class,
     identifier: Object.keys(entities).join(""),
     data,
   };
 };
 
-const stateUsesUnits = (state: HassEntity) =>
-  attributesHaveUnits(state.attributes);
+const NUMERICAL_DOMAINS = ["counter", "input_number", "number"];
 
-const attributesHaveUnits = (attributes: { [key: string]: any }) =>
+const isNumericFromDomain = (domain: string) =>
+  NUMERICAL_DOMAINS.includes(domain);
+
+const isNumericFromAttributes = (attributes: { [key: string]: any }) =>
   "unit_of_measurement" in attributes || "state_class" in attributes;
+
+const isNumericSensorEntity = (
+  stateObj: HassEntity,
+  sensorNumericalDeviceClasses: string[]
+) =>
+  stateObj.attributes.device_class != null &&
+  sensorNumericalDeviceClasses.includes(stateObj.attributes.device_class);
+
+const BLANK_UNIT = " ";
 
 export const computeHistory = (
   hass: HomeAssistant,
   stateHistory: HistoryStates,
-  localize: LocalizeFunc
+  localize: LocalizeFunc,
+  sensorNumericalDeviceClasses: string[],
+  splitDeviceClasses = false
 ): HistoryResult => {
   const lineChartDevices: { [unit: string]: HistoryStates } = {};
   const timelineDevices: TimelineEntity[] = [];
@@ -407,54 +434,97 @@ export const computeHistory = (
       return;
     }
 
+    const domain = computeDomain(entityId);
+
     const currentState =
       entityId in hass.states ? hass.states[entityId] : undefined;
-    const stateWithUnitorStateClass =
-      !currentState &&
-      stateInfo.find((state) => state.a && attributesHaveUnits(state.a));
+    const numericStateFromHistory =
+      currentState || isNumericFromDomain(domain)
+        ? undefined
+        : stateInfo.find(
+            (state) => state.a && isNumericFromAttributes(state.a)
+          );
 
     let unit: string | undefined;
 
-    if (currentState && stateUsesUnits(currentState)) {
-      unit = currentState.attributes.unit_of_measurement || " ";
-    } else if (stateWithUnitorStateClass) {
-      unit = stateWithUnitorStateClass.a.unit_of_measurement || " ";
+    const isNumeric =
+      isNumericFromDomain(domain) ||
+      (currentState != null &&
+        isNumericFromAttributes(currentState.attributes)) ||
+      (currentState != null &&
+        domain === "sensor" &&
+        isNumericSensorEntity(currentState, sensorNumericalDeviceClasses)) ||
+      numericStateFromHistory != null;
+
+    if (isNumeric) {
+      unit =
+        currentState?.attributes.unit_of_measurement ||
+        numericStateFromHistory?.a.unit_of_measurement ||
+        BLANK_UNIT;
     } else {
       unit = {
         zone: localize("ui.dialogs.more_info_control.zone.graph_unit"),
         climate: hass.config.unit_system.temperature,
-        counter: "#",
         humidifier: "%",
-        input_number: "#",
-        number: "#",
         water_heater: hass.config.unit_system.temperature,
-      }[computeDomain(entityId)];
+      }[domain];
     }
+
+    const specialDomainClasses = {
+      climate: "temperature",
+      humidifier: "humidity",
+      water_heater: "temperature",
+    };
+
+    const deviceClass: string | undefined =
+      specialDomainClasses[domain] ||
+      (currentState?.attributes || numericStateFromHistory?.a)?.device_class;
+
+    const key = computeGroupKey(unit, deviceClass, splitDeviceClasses);
 
     if (!unit) {
       timelineDevices.push(
         processTimelineEntity(
           localize,
           hass.locale,
+          hass.config,
           hass.entities,
           entityId,
           stateInfo,
           currentState
         )
       );
-    } else if (unit in lineChartDevices && entityId in lineChartDevices[unit]) {
-      lineChartDevices[unit][entityId].push(...stateInfo);
-    } else {
-      if (!(unit in lineChartDevices)) {
-        lineChartDevices[unit] = {};
+    } else if (
+      key &&
+      key in lineChartDevices &&
+      entityId in lineChartDevices[key]
+    ) {
+      lineChartDevices[key][entityId].push(...stateInfo);
+    } else if (key) {
+      if (!(key in lineChartDevices)) {
+        lineChartDevices[key] = {};
       }
-      lineChartDevices[unit][entityId] = stateInfo;
+      lineChartDevices[key][entityId] = stateInfo;
     }
   });
 
-  const unitStates = Object.keys(lineChartDevices).map((unit) =>
-    processLineChartEntities(unit, lineChartDevices[unit], hass.states)
-  );
+  const unitStates = Object.keys(lineChartDevices).map((key) => {
+    const splitKey = key.split("_");
+    const unit = splitKey[0];
+    const deviceClass = splitKey[1] || undefined;
+    return processLineChartEntities(
+      unit,
+      deviceClass,
+      lineChartDevices[key],
+      hass.states
+    );
+  });
 
   return { line: unitStates, timeline: timelineDevices };
 };
+
+export const computeGroupKey = (
+  unit: string | undefined,
+  device_class: string | undefined,
+  splitDeviceClasses: boolean
+) => (splitDeviceClasses ? `${unit}_${device_class || ""}` : unit);

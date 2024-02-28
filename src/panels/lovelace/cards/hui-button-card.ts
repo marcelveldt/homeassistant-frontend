@@ -1,45 +1,64 @@
+import { consume } from "@lit-labs/context";
 import "@material/mwc-ripple";
 import type { Ripple } from "@material/mwc-ripple";
 import { RippleHandlers } from "@material/mwc-ripple/ripple-handlers";
-import { HassEntity } from "home-assistant-js-websocket";
+import {
+  HassConfig,
+  HassEntities,
+  HassEntity,
+} from "home-assistant-js-websocket";
 import {
   css,
   CSSResultGroup,
   html,
   LitElement,
+  nothing,
   PropertyValues,
-  TemplateResult,
 } from "lit";
-import {
-  customElement,
-  eventOptions,
-  property,
-  queryAsync,
-  state,
-} from "lit/decorators";
+import { customElement, eventOptions, queryAsync, state } from "lit/decorators";
 import { ifDefined } from "lit/directives/if-defined";
 import { styleMap } from "lit/directives/style-map";
 import { DOMAINS_TOGGLE } from "../../../common/const";
+import { transform } from "../../../common/decorators/transform";
 import { applyThemesOnElement } from "../../../common/dom/apply_themes_on_element";
+import { fireEvent } from "../../../common/dom/fire_event";
 import { computeDomain } from "../../../common/entity/compute_domain";
-import { computeStateDisplay } from "../../../common/entity/compute_state_display";
+import { computeStateDisplaySingleEntity } from "../../../common/entity/compute_state_display";
 import { computeStateDomain } from "../../../common/entity/compute_state_domain";
 import { computeStateName } from "../../../common/entity/compute_state_name";
-import { stateColorCss } from "../../../common/entity/state_color";
+import {
+  stateColorCss,
+  stateColorBrightness,
+} from "../../../common/entity/state_color";
 import { isValidEntityId } from "../../../common/entity/valid_entity_id";
 import { iconColorCSS } from "../../../common/style/icon_color_css";
+import { LocalizeFunc } from "../../../common/translations/localize";
 import "../../../components/ha-card";
-import { HVAC_ACTION_TO_MODE } from "../../../data/climate";
-import { LightEntity } from "../../../data/light";
-import { ActionHandlerEvent } from "../../../data/lovelace";
+import { CLIMATE_HVAC_ACTION_TO_MODE } from "../../../data/climate";
+import {
+  configContext,
+  entitiesContext,
+  localeContext,
+  localizeContext,
+  statesContext,
+  themesContext,
+} from "../../../data/context";
+import { EntityRegistryDisplayEntry } from "../../../data/entity_registry";
+import { ActionHandlerEvent } from "../../../data/lovelace/action_handler";
+import { FrontendLocaleData } from "../../../data/translation";
+import { Themes } from "../../../data/ws-themes";
 import { HomeAssistant } from "../../../types";
 import { actionHandler } from "../common/directives/action-handler-directive";
 import { findEntities } from "../common/find-entities";
-import { handleAction } from "../common/handle-action";
 import { hasAction } from "../common/has-action";
 import { createEntityNotFoundWarning } from "../components/hui-warning";
 import { LovelaceCard, LovelaceCardEditor } from "../types";
 import { ButtonCardConfig } from "./types";
+
+export const getEntityDefaultButtonAction = (entityId?: string) =>
+  entityId && DOMAINS_TOGGLE.has(computeDomain(entityId))
+    ? "toggle"
+    : "more-info";
 
 @customElement("hui-button-card")
 export class HuiButtonCard extends LitElement implements LovelaceCard {
@@ -71,9 +90,43 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
     };
   }
 
-  @property({ attribute: false }) public hass?: HomeAssistant;
+  public hass!: HomeAssistant;
 
   @state() private _config?: ButtonCardConfig;
+
+  @consume<any>({ context: statesContext, subscribe: true })
+  @transform({
+    transformer: function (this: HuiButtonCard, value: HassEntities) {
+      return this._config?.entity ? value[this._config?.entity] : undefined;
+    },
+    watch: ["_config"],
+  })
+  _stateObj?: HassEntity;
+
+  @state()
+  @consume({ context: themesContext, subscribe: true })
+  _themes!: Themes;
+
+  @state()
+  @consume({ context: localizeContext, subscribe: true })
+  _localize!: LocalizeFunc;
+
+  @state()
+  @consume({ context: localeContext, subscribe: true })
+  _locale!: FrontendLocaleData;
+
+  @state()
+  @consume({ context: configContext, subscribe: true })
+  _hassConfig!: HassConfig;
+
+  @consume<any>({ context: entitiesContext, subscribe: true })
+  @transform<HomeAssistant["entities"], EntityRegistryDisplayEntry>({
+    transformer: function (this: HuiButtonCard, value) {
+      return this._config?.entity ? value[this._config?.entity] : undefined;
+    },
+    watch: ["_config"],
+  })
+  _entity?: EntityRegistryDisplayEntry;
 
   @queryAsync("mwc-ripple") private _ripple!: Promise<Ripple | null>;
 
@@ -81,17 +134,23 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
 
   private getStateColor(stateObj: HassEntity, config: ButtonCardConfig) {
     const domain = stateObj ? computeStateDomain(stateObj) : undefined;
-    return (
-      config &&
-      (config.state_color ||
-        (domain === "light" && config.state_color !== false))
-    );
+    return config && (config.state_color ?? domain === "light");
   }
 
   public getCardSize(): number {
     return (
       (this._config?.show_icon ? 4 : 0) + (this._config?.show_name ? 1 : 0)
     );
+  }
+
+  public getGridSize(): [number, number] {
+    if (
+      this._config?.show_icon &&
+      (this._config?.show_name || this._config?.show_state)
+    ) {
+      return [2, 2];
+    }
+    return [1, 1];
   }
 
   public setConfig(config: ButtonCardConfig): void {
@@ -101,10 +160,7 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
 
     this._config = {
       tap_action: {
-        action:
-          config.entity && DOMAINS_TOGGLE.has(computeDomain(config.entity))
-            ? "toggle"
-            : "more-info",
+        action: getEntityDefaultButtonAction(config.entity),
       },
       hold_action: { action: "more-info" },
       show_icon: true,
@@ -114,35 +170,11 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
     };
   }
 
-  protected shouldUpdate(changedProps: PropertyValues): boolean {
-    if (changedProps.has("_config")) {
-      return true;
+  protected render() {
+    if (!this._config || !this._localize || !this._locale) {
+      return nothing;
     }
-
-    const oldHass = changedProps.get("hass") as HomeAssistant | undefined;
-
-    if (
-      !oldHass ||
-      oldHass.themes !== this.hass!.themes ||
-      oldHass.locale !== this.hass!.locale
-    ) {
-      return true;
-    }
-
-    return (
-      Boolean(this._config!.entity) &&
-      oldHass.states[this._config!.entity!] !==
-        this.hass!.states[this._config!.entity!]
-    );
-  }
-
-  protected render(): TemplateResult {
-    if (!this._config || !this.hass) {
-      return html``;
-    }
-    const stateObj = this._config.entity
-      ? this.hass.states[this._config.entity]
-      : undefined;
+    const stateObj = this._stateObj;
 
     if (this._config.entity && !stateObj) {
       return html`
@@ -161,10 +193,10 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
     return html`
       <ha-card
         @action=${this._handleAction}
-        @focus=${this.handleRippleFocus}
-        @blur=${this.handleRippleBlur}
         @mousedown=${this.handleRippleActivate}
         @mouseup=${this.handleRippleDeactivate}
+        @mouseenter=${this.handleRippleMouseEnter}
+        @mouseleave=${this.handleRippleMouseLeave}
         @touchstart=${this.handleRippleActivate}
         @touchend=${this.handleRippleDeactivate}
         @touchcancel=${this.handleRippleDeactivate}
@@ -178,6 +210,9 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
         tabindex=${ifDefined(
           hasAction(this._config.tap_action) ? "0" : undefined
         )}
+        style=${styleMap({
+          "--state-color": colored ? this._computeColor(stateObj) : undefined,
+        })}
       >
         ${this._config.show_icon
           ? html`
@@ -188,12 +223,10 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
                 )}
                 data-state=${ifDefined(stateObj?.state)}
                 .icon=${this._config.icon}
-                .state=${stateObj}
+                .hass=${this.hass}
+                .stateObj=${stateObj}
                 style=${styleMap({
-                  color: colored ? this._computeColor(stateObj) : undefined,
-                  filter: colored
-                    ? this._computeBrightness(stateObj)
-                    : undefined,
+                  filter: colored ? stateColorBrightness(stateObj) : undefined,
                   height: this._config.icon_height
                     ? this._config.icon_height
                     : "",
@@ -206,11 +239,12 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
           : ""}
         ${this._config.show_state && stateObj
           ? html`<span class="state">
-              ${computeStateDisplay(
-                this.hass.localize,
+              ${computeStateDisplaySingleEntity(
+                this._localize,
                 stateObj,
-                this.hass.locale,
-                this.hass.entities
+                this._locale,
+                this._hassConfig,
+                this._entity
               )}
             </span>`
           : ""}
@@ -221,21 +255,26 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
 
   protected updated(changedProps: PropertyValues): void {
     super.updated(changedProps);
-    if (!this._config || !this.hass) {
+    if (!this._config || !this._themes) {
       return;
     }
-    const oldHass = changedProps.get("hass") as HomeAssistant | undefined;
+    if (!changedProps.has("_themes") && !changedProps.has("_config")) {
+      return;
+    }
+    const oldThemes = changedProps.get("_themes") as
+      | HomeAssistant["themes"]
+      | undefined;
     const oldConfig = changedProps.get("_config") as
       | ButtonCardConfig
       | undefined;
 
     if (
-      !oldHass ||
-      !oldConfig ||
-      oldHass.themes !== this.hass.themes ||
-      oldConfig.theme !== this._config.theme
+      (changedProps.has("_themes") &&
+        (!oldThemes || oldThemes !== this._themes)) ||
+      (changedProps.has("_config") &&
+        (!oldConfig || oldConfig.theme !== this._config.theme))
     ) {
-      applyThemesOnElement(this, this.hass.themes, this._config.theme);
+      applyThemesOnElement(this, this._themes, this._config.theme);
     }
   }
 
@@ -249,16 +288,19 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
     this._rippleHandlers.startPress(evt);
   }
 
+  @eventOptions({ passive: true })
   private handleRippleDeactivate() {
     this._rippleHandlers.endPress();
   }
 
-  private handleRippleFocus() {
-    this._rippleHandlers.startFocus();
+  @eventOptions({ passive: true })
+  private handleRippleMouseEnter() {
+    this._rippleHandlers.startHover();
   }
 
-  private handleRippleBlur() {
-    this._rippleHandlers.endFocus();
+  @eventOptions({ passive: true })
+  private handleRippleMouseLeave() {
+    this._rippleHandlers.endHover();
   }
 
   static get styles(): CSSResultGroup {
@@ -266,6 +308,9 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
       iconColorCSS,
       css`
         ha-card {
+          --state-inactive-color: var(--paper-item-icon-color, #44739e);
+          --state-color: var(--paper-item-icon-color, #44739e);
+          --mdc-ripple-color: var(--state-color);
           cursor: pointer;
           display: flex;
           flex-direction: column;
@@ -287,9 +332,10 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
         ha-state-icon {
           width: 40%;
           height: auto;
-          color: var(--paper-item-icon-color, #44739e);
+          max-height: 80%;
+          color: var(--state-color);
           --mdc-icon-size: 100%;
-          --state-inactive-color: var(--paper-item-icon-color, #44739e);
+          transition: transform 180ms ease-in-out;
         }
 
         ha-state-icon + span {
@@ -301,6 +347,22 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
           outline: none;
         }
 
+        ha-card:focus-visible {
+          --shadow-default: var(--ha-card-box-shadow, 0 0 0 0 transparent);
+          --shadow-focus: 0 0 0 1px
+            var(--state-color, var(--paper-item-icon-color, #44739e));
+          border-color: var(
+            --state-color,
+            var(--paper-item-icon-color, #44739e)
+          );
+          box-shadow: var(--shadow-default), var(--shadow-focus);
+        }
+
+        ha-card:focus-visible ha-state-icon,
+        :host(:active) ha-state-icon {
+          transform: scale(1.2);
+        }
+
         .state {
           font-size: 0.9rem;
           color: var(--secondary-text-color);
@@ -309,22 +371,14 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
     ];
   }
 
-  private _computeBrightness(stateObj: HassEntity | LightEntity): string {
-    if (stateObj.attributes.brightness) {
-      const brightness = stateObj.attributes.brightness;
-      return `brightness(${(brightness + 245) / 5}%)`;
-    }
-    return "";
-  }
-
   private _computeColor(stateObj: HassEntity): string | undefined {
     if (stateObj.attributes.rgb_color) {
       return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
     }
     if (stateObj.attributes.hvac_action) {
       const hvacAction = stateObj.attributes.hvac_action;
-      if (["heating", "cooling", "drying", "fan"].includes(hvacAction)) {
-        return stateColorCss(stateObj, HVAC_ACTION_TO_MODE[hvacAction]);
+      if (hvacAction in CLIMATE_HVAC_ACTION_TO_MODE) {
+        return stateColorCss(stateObj, CLIMATE_HVAC_ACTION_TO_MODE[hvacAction]);
       }
       return undefined;
     }
@@ -336,7 +390,10 @@ export class HuiButtonCard extends LitElement implements LovelaceCard {
   }
 
   private _handleAction(ev: ActionHandlerEvent) {
-    handleAction(this, this.hass!, this._config!, ev.detail.action!);
+    fireEvent(this, "hass-action", {
+      config: this._config!,
+      action: ev.detail.action,
+    });
   }
 }
 

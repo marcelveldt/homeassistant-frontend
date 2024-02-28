@@ -1,16 +1,15 @@
-import { html, LitElement, PropertyValues, TemplateResult } from "lit";
-import memoizeOne from "memoize-one";
+import { html, LitElement, PropertyValues, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import { computeRTLDirection } from "../../../../../common/util/compute_rtl";
-import "../../../../../components/ha-code-editor";
-import { HomeAssistant } from "../../../../../types";
+import memoizeOne from "memoize-one";
 import "../../../../../components/data-table/ha-data-table";
 import type {
   DataTableColumnContainer,
   DataTableRowData,
 } from "../../../../../components/data-table/ha-data-table";
 import "../../../../../components/ha-circular-progress";
+import "../../../../../components/ha-code-editor";
 import { fetchDevices, ZHADevice } from "../../../../../data/zha";
+import { HomeAssistant } from "../../../../../types";
 
 export interface DeviceRowData extends DataTableRowData {
   id: string;
@@ -24,9 +23,9 @@ export interface DeviceRowData extends DataTableRowData {
 class ZHADeviceNeighbors extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ type: Boolean }) public narrow!: boolean;
+  @property({ type: Boolean }) public narrow = false;
 
-  @property() public device: ZHADevice | undefined;
+  @property({ attribute: false }) public device?: ZHADevice;
 
   @state() private _devices: Map<string, ZHADevice> | undefined;
 
@@ -113,23 +112,21 @@ class ZHADeviceNeighbors extends LitElement {
           }
   );
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this.device) {
-      return html``;
+      return nothing;
     }
     return html`
       ${!this._devices
         ? html`<ha-circular-progress
-            alt="Loading"
             size="large"
-            active
+            indeterminate
           ></ha-circular-progress>`
         : html`<ha-data-table
             .hass=${this.hass}
             .columns=${this._columns(this.narrow)}
             .data=${this._deviceNeighbors(this.device, this._devices)}
             auto-height
-            .dir=${computeRTLDirection(this.hass)}
             .searchLabel=${this.hass.localize(
               "ui.components.data-table.search"
             )}

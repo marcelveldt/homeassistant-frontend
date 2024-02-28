@@ -1,11 +1,11 @@
 import "@material/mwc-list/mwc-list-item";
 import {
-  css,
   CSSResultGroup,
-  html,
   LitElement,
   PropertyValues,
-  TemplateResult,
+  css,
+  html,
+  nothing,
 } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
@@ -13,8 +13,11 @@ import { fireEvent } from "../../../../common/dom/fire_event";
 import { stringCompare } from "../../../../common/string/compare";
 import { HaSwitch } from "../../../../components/ha-switch";
 import "../../../../components/user/ha-user-badge";
-import { LovelaceViewConfig, ShowViewConfig } from "../../../../data/lovelace";
-import { fetchUsers, User } from "../../../../data/user";
+import {
+  LovelaceViewConfig,
+  ShowViewConfig,
+} from "../../../../data/lovelace/config/view";
+import { User, fetchUsers } from "../../../../data/user";
 import { HomeAssistant } from "../../../../types";
 
 declare global {
@@ -35,7 +38,7 @@ export class HuiViewVisibilityEditor extends LitElement {
 
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property() public _config!: LovelaceViewConfig;
+  @state() private _config!: LovelaceViewConfig;
 
   @state() private _users!: User[];
 
@@ -52,13 +55,12 @@ export class HuiViewVisibilityEditor extends LitElement {
 
     fetchUsers(this.hass).then((users) => {
       this._users = users.filter((user) => !user.system_generated);
-      fireEvent(this, "iron-resize");
     });
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this.hass || !this._users) {
-      return html``;
+      return nothing;
     }
 
     return html`

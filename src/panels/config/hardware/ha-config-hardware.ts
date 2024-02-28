@@ -1,11 +1,10 @@
 import "@material/mwc-list/mwc-list";
 import "@material/mwc-list/mwc-list-item";
-import { mdiDotsVertical } from "@mdi/js";
+import { mdiPower } from "@mdi/js";
 import type { ChartOptions } from "chart.js";
 import { UnsubscribeFunc } from "home-assistant-js-websocket";
-import { css, html, LitElement, PropertyValues, TemplateResult } from "lit";
+import { css, html, LitElement, nothing, PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import { ifDefined } from "lit/directives/if-defined";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { numberFormatToLocale } from "../../../common/number/format_number";
 import { round } from "../../../common/number/round";
@@ -13,9 +12,9 @@ import { blankBeforePercent } from "../../../common/translations/blank_before_pe
 import "../../../components/buttons/ha-progress-button";
 import "../../../components/chart/ha-chart-base";
 import "../../../components/ha-alert";
-import "../../../components/ha-button-menu";
 import "../../../components/ha-card";
 import "../../../components/ha-clickable-list-item";
+import "../../../components/ha-icon-button";
 import "../../../components/ha-icon-next";
 import "../../../components/ha-settings-row";
 import {
@@ -28,30 +27,18 @@ import {
   SystemStatusStreamMessage,
 } from "../../../data/hardware";
 import {
-  extractApiErrorMessage,
-  ignoreSupervisorError,
-} from "../../../data/hassio/common";
-import {
   fetchHassioHassOsInfo,
-  fetchHassioHostInfo,
   HassioHassOSInfo,
-  HassioHostInfo,
-  rebootHost,
-  shutdownHost,
 } from "../../../data/hassio/host";
 import { scanUSBDevices } from "../../../data/usb";
 import { showOptionsFlowDialog } from "../../../dialogs/config-flow/show-dialog-options-flow";
-import {
-  showAlertDialog,
-  showConfirmationDialog,
-} from "../../../dialogs/generic/show-dialog-box";
+import { showRestartDialog } from "../../../dialogs/restart/show-dialog-restart";
 import "../../../layouts/hass-subpage";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
-import { DEFAULT_PRIMARY_COLOR } from "../../../resources/ha-style";
+import { DEFAULT_PRIMARY_COLOR } from "../../../resources/styles-data";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
 import { hardwareBrandsUrl } from "../../../util/brands-url";
-import { showToast } from "../../../util/toast";
 import { showhardwareAvailableDialog } from "./show-dialog-hardware-available";
 
 const DATASAMPLES = 60;
@@ -69,13 +56,11 @@ const DATA_SET_CONFIG = {
 class HaConfigHardware extends SubscribeMixin(LitElement) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ type: Boolean }) public narrow!: boolean;
+  @property({ type: Boolean }) public narrow = false;
 
   @state() private _error?: { code: string; message: string };
 
   @state() private _OSData?: HassioHassOSInfo;
-
-  @state() private _hostData?: HassioHostInfo;
 
   @state() private _hardwareInfo?: HardwareInfo;
 
@@ -184,6 +169,7 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
             adapters: {
               date: {
                 locale: this.hass.locale,
+                config: this.hass.config,
               },
             },
             gridLines: {
@@ -223,7 +209,7 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
     }
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     let boardId: string | undefined;
     let boardName: string | undefined;
     let imageURL: string | undefined;
@@ -273,32 +259,16 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
         .header=${this.hass.localize("ui.panel.config.hardware.caption")}
       >
         ${isComponentLoaded(this.hass, "hassio")
-          ? html`<ha-button-menu corner="BOTTOM_START" slot="toolbar-icon">
+          ? html`
               <ha-icon-button
-                .label=${this.hass.localize("ui.common.menu")}
-                .path=${mdiDotsVertical}
-                slot="trigger"
+                slot="toolbar-icon"
+                .path=${mdiPower}
+                .label=${this.hass.localize(
+                  "ui.panel.config.hardware.restart_homeassistant"
+                )}
+                @click=${this._showRestartDialog}
               ></ha-icon-button>
-              <mwc-list-item @click=${this._openHardware}
-                >${this.hass.localize(
-                  "ui.panel.config.hardware.available_hardware.title"
-                )}</mwc-list-item
-              >
-              ${this._hostData
-                ? html`
-                    <mwc-list-item class="warning" @click=${this._hostReboot}
-                      >${this.hass.localize(
-                        "ui.panel.config.hardware.reboot_host"
-                      )}</mwc-list-item
-                    >
-                    <mwc-list-item class="warning" @click=${this._hostShutdown}
-                      >${this.hass.localize(
-                        "ui.panel.config.hardware.shutdown_host"
-                      )}</mwc-list-item
-                    >
-                  `
-                : ""}
-            </ha-button-menu>`
+            `
           : ""}
         ${this._error
           ? html`
@@ -308,72 +278,85 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
             `
           : ""}
         <div class="content">
-          ${boardName
+          ${boardName || isComponentLoaded(this.hass, "hassio")
             ? html`
                 <ha-card outlined>
                   <div class="card-content">
-                    <mwc-list>
-                      <ha-list-item
-                        noninteractive
-                        graphic=${ifDefined(imageURL ? "medium" : undefined)}
-                        .twoline=${Boolean(boardId)}
-                      >
-                        ${imageURL
-                          ? html`<img alt="" slot="graphic" src=${imageURL} />`
-                          : ""}
-                        <span class="primary-text">
-                          ${boardName ||
-                          this.hass.localize("ui.panel.config.hardware.board")}
-                        </span>
-                        ${boardId
-                          ? html`
-                              <span class="secondary-text" slot="secondary"
-                                >${boardId}</span
-                              >
-                            `
-                          : ""}
-                      </ha-list-item>
-                      ${documentationURL
-                        ? html`
-                            <ha-clickable-list-item
-                              .href=${documentationURL}
-                              openNewTab
-                              twoline
-                              hasMeta
-                            >
-                              <span
-                                >${this.hass.localize(
-                                  "ui.panel.config.hardware.documentation"
-                                )}</span
-                              >
-                              <span slot="secondary"
-                                >${this.hass.localize(
-                                  "ui.panel.config.hardware.documentation_description"
-                                )}</span
-                              >
-                              <ha-icon-next slot="meta"></ha-icon-next>
-                            </ha-clickable-list-item>
-                          `
+                    ${imageURL
+                      ? html`<img
+                          alt=""
+                          src=${imageURL}
+                          crossorigin="anonymous"
+                          referrerpolicy="no-referrer"
+                        />`
+                      : ""}
+                    <div class="board-info">
+                      <p class="primary-text">
+                        ${boardName ||
+                        this.hass.localize(
+                          "ui.panel.config.hardware.generic_hardware"
+                        )}
+                      </p>
+                      ${boardId
+                        ? html`<p class="secondary-text">${boardId}</p>`
                         : ""}
-                    </mwc-list>
+                    </div>
                   </div>
-                  ${boardConfigEntries.length
+                  ${documentationURL
+                    ? html`
+                        <mwc-list>
+                          <ha-clickable-list-item
+                            .href=${documentationURL}
+                            openNewTab
+                            twoline
+                            hasMeta
+                          >
+                            <span
+                              >${this.hass.localize(
+                                "ui.panel.config.hardware.documentation"
+                              )}</span
+                            >
+                            <span slot="secondary"
+                              >${this.hass.localize(
+                                "ui.panel.config.hardware.documentation_description"
+                              )}</span
+                            >
+                            <ha-icon-next slot="meta"></ha-icon-next>
+                          </ha-clickable-list-item>
+                        </mwc-list>
+                      `
+                    : ""}
+                  ${boardConfigEntries.length ||
+                  isComponentLoaded(this.hass, "hassio")
                     ? html`<div class="card-actions">
-                        <mwc-button
-                          .entry=${boardConfigEntries[0]}
-                          @click=${this._openOptionsFlow}
-                        >
-                          ${this.hass.localize(
-                            "ui.panel.config.hardware.configure"
-                          )}
-                        </mwc-button>
+                        ${boardConfigEntries.length
+                          ? html`
+                              <mwc-button
+                                .entry=${boardConfigEntries[0]}
+                                @click=${this._openOptionsFlow}
+                              >
+                                ${this.hass.localize(
+                                  "ui.panel.config.hardware.configure"
+                                )}
+                              </mwc-button>
+                            `
+                          : nothing}
+                        ${isComponentLoaded(this.hass, "hassio")
+                          ? html`
+                              <mwc-button @click=${this._openHardware}>
+                                ${this.hass.localize(
+                                  "ui.panel.config.hardware.available_hardware.title"
+                                )}
+                              </mwc-button>
+                            `
+                          : nothing}
                       </div>`
                     : ""}
                 </ha-card>
               `
             : ""}
           ${dongles?.length
-            ? html`<ha-card>
+            ? html`<ha-card outlined>
                 ${dongles.map((dongle) => {
                   const configEntry = dongle.config_entries
                     .map((id) => this._configEntries?.[id])
@@ -455,7 +438,17 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
                     ></ha-chart-base>
                   </div>
                 </ha-card>`
-            : ""}
+            : isComponentLoaded(this.hass, "hardware")
+              ? html`<ha-card outlined>
+                  <div class="card-content">
+                    <div class="value">
+                      ${this.hass.localize(
+                        "ui.panel.config.hardware.loading_system_data"
+                      )}
+                    </div>
+                  </div>
+                </ha-card>`
+              : ""}
         </div>
       </hass-subpage>
     `;
@@ -475,10 +468,6 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
       if (isHassioLoaded && !this._hardwareInfo?.hardware.length) {
         this._OSData = await fetchHassioHassOsInfo(this.hass);
       }
-
-      if (isHassioLoaded) {
-        this._hostData = await fetchHassioHostInfo(this.hass);
-      }
     } catch (err: any) {
       this._error = err.message || err;
     }
@@ -496,72 +485,8 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
     showhardwareAvailableDialog(this);
   }
 
-  private async _hostReboot(): Promise<void> {
-    const confirmed = await showConfirmationDialog(this, {
-      title: this.hass.localize("ui.panel.config.hardware.reboot_host_title"),
-      text: this.hass.localize("ui.panel.config.hardware.reboot_host_text"),
-      confirmText: this.hass.localize("ui.panel.config.hardware.reboot"),
-      dismissText: this.hass.localize("ui.common.cancel"),
-      destructive: true,
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    showToast(this, {
-      message: this.hass.localize("ui.panel.config.hardware.rebooting_host"),
-      duration: 0,
-    });
-
-    try {
-      await rebootHost(this.hass);
-    } catch (err: any) {
-      // Ignore connection errors, these are all expected
-      if (this.hass.connection.connected && !ignoreSupervisorError(err)) {
-        showAlertDialog(this, {
-          title: this.hass.localize(
-            "ui.panel.config.hardware.failed_to_reboot_host"
-          ),
-          text: extractApiErrorMessage(err),
-        });
-      }
-    }
-  }
-
-  private async _hostShutdown(): Promise<void> {
-    const confirmed = await showConfirmationDialog(this, {
-      title: this.hass.localize("ui.panel.config.hardware.shutdown_host_title"),
-      text: this.hass.localize("ui.panel.config.hardware.shutdown_host_text"),
-      confirmText: this.hass.localize("ui.panel.config.hardware.shutdown"),
-      dismissText: this.hass.localize("ui.common.cancel"),
-      destructive: true,
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    showToast(this, {
-      message: this.hass.localize(
-        "ui.panel.config.hardware.host_shutting_down"
-      ),
-      duration: 0,
-    });
-
-    try {
-      await shutdownHost(this.hass);
-    } catch (err: any) {
-      // Ignore connection errors, these are all expected
-      if (this.hass.connection.connected && !ignoreSupervisorError(err)) {
-        showAlertDialog(this, {
-          title: this.hass.localize(
-            "ui.panel.config.hardware.failed_to_shutdown_host"
-          ),
-          text: extractApiErrorMessage(err),
-        });
-      }
-    }
+  private async _showRestartDialog() {
+    showRestartDialog(this);
   }
 
   static styles = [
@@ -571,6 +496,8 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
         padding: 28px 20px 0;
         max-width: 1040px;
         margin: 0 auto;
+        --mdc-list-side-padding: 24px;
+        --mdc-list-vertical-padding: 0;
       }
       ha-card {
         max-width: 600px;
@@ -587,16 +514,21 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
         flex-direction: column;
         padding: 16px;
       }
-      ha-button-menu {
-        color: var(--secondary-text-color);
-        --mdc-menu-min-width: 200px;
+      .card-content img {
+        max-width: 300px;
+        margin: auto;
       }
-
+      .board-info {
+        text-align: center;
+      }
       .primary-text {
         font-size: 16px;
+        margin: 0;
       }
       .secondary-text {
         font-size: 14px;
+        margin-bottom: 0;
+        color: var(--secondary-text-color);
       }
 
       .header {
@@ -619,6 +551,10 @@ class HaConfigHardware extends SubscribeMixin(LitElement) {
         align-items: center;
         height: 48px;
         padding: 8px 16px;
+      }
+      .card-actions {
+        display: flex;
+        justify-content: space-between;
       }
     `,
   ];

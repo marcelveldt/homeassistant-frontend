@@ -1,19 +1,22 @@
+import "@material/mwc-button/mwc-button";
 import { mdiDevices } from "@mdi/js";
-import { css, CSSResultGroup, html, LitElement, TemplateResult } from "lit";
+import { css, CSSResultGroup, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
+import "../../../../components/entity/ha-entity-picker";
+import "../../../../components/entity/ha-statistic-picker";
 import "../../../../components/ha-dialog";
-import { DeviceConsumptionEnergyPreference } from "../../../../data/energy";
+import "../../../../components/ha-formfield";
+import "../../../../components/ha-radio";
+import {
+  DeviceConsumptionEnergyPreference,
+  energyStatisticHelpUrl,
+} from "../../../../data/energy";
+import { getSensorDeviceClassConvertibleUnits } from "../../../../data/sensor";
 import { HassDialog } from "../../../../dialogs/make-dialog-manager";
 import { haStyleDialog } from "../../../../resources/styles";
 import { HomeAssistant } from "../../../../types";
 import { EnergySettingsDeviceDialogParams } from "./show-dialogs-energy";
-import "@material/mwc-button/mwc-button";
-import "../../../../components/entity/ha-statistic-picker";
-import "../../../../components/ha-radio";
-import "../../../../components/ha-formfield";
-import "../../../../components/entity/ha-entity-picker";
-import { getSensorDeviceClassConvertibleUnits } from "../../../../data/sensor";
 
 const energyUnitClasses = ["energy"];
 
@@ -32,6 +35,8 @@ export class DialogEnergyDeviceSettings
 
   @state() private _error?: string;
 
+  private _excludeList?: string[];
+
   public async showDialog(
     params: EnergySettingsDeviceDialogParams
   ): Promise<void> {
@@ -39,18 +44,22 @@ export class DialogEnergyDeviceSettings
     this._energy_units = (
       await getSensorDeviceClassConvertibleUnits(this.hass, "energy")
     ).units;
+    this._excludeList = this._params.device_consumptions.map(
+      (entry) => entry.stat_consumption
+    );
   }
 
   public closeDialog(): void {
     this._params = undefined;
     this._device = undefined;
     this._error = undefined;
+    this._excludeList = undefined;
     fireEvent(this, "dialog-closed", { dialog: this.localName });
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this._params) {
-      return html``;
+      return nothing;
     }
 
     const pickableUnit = this._energy_units?.join(", ") || "";
@@ -77,10 +86,12 @@ export class DialogEnergyDeviceSettings
 
         <ha-statistic-picker
           .hass=${this.hass}
+          .helpMissingEntityUrl=${energyStatisticHelpUrl}
           .includeUnitClass=${energyUnitClasses}
           .label=${this.hass.localize(
             "ui.panel.config.energy.device_consumption.dialog.device_consumption_energy"
           )}
+          .excludeStatistics=${this._excludeList}
           @value-changed=${this._statisticChanged}
           dialogInitialFocus
         ></ha-statistic-picker>

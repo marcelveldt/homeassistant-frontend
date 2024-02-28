@@ -1,5 +1,5 @@
 import { mdiArrowBottomLeft, mdiArrowTopRight, mdiStop } from "@mdi/js";
-import { css, CSSResultGroup, html, LitElement, TemplateResult } from "lit";
+import { css, CSSResultGroup, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { supportsFeature } from "../common/entity/supports-feature";
@@ -19,9 +19,9 @@ class HaCoverTiltControls extends LitElement {
 
   @property({ attribute: false }) stateObj!: CoverEntity;
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this.stateObj) {
-      return html``;
+      return nothing;
     }
 
     return html` <ha-icon-button
@@ -31,9 +31,7 @@ class HaCoverTiltControls extends LitElement {
             CoverEntityFeature.OPEN_TILT
           ),
         })}
-        .label=${this.hass.localize(
-          "ui.dialogs.more_info_control.cover.open_tilt_cover"
-        )}
+        .label=${this.hass.localize("ui.card.cover.open_tilt_cover")}
         .path=${mdiArrowTopRight}
         @click=${this._onOpenTiltTap}
         .disabled=${!canOpenTilt(this.stateObj)}
@@ -45,9 +43,7 @@ class HaCoverTiltControls extends LitElement {
             CoverEntityFeature.STOP_TILT
           ),
         })}
-        .label=${this.hass.localize(
-          "ui.dialogs.more_info_control.cover.stop_cover"
-        )}
+        .label=${this.hass.localize("ui.card.cover.stop_cover")}
         .path=${mdiStop}
         @click=${this._onStopTiltTap}
         .disabled=${!canStopTilt(this.stateObj)}
@@ -59,9 +55,7 @@ class HaCoverTiltControls extends LitElement {
             CoverEntityFeature.CLOSE_TILT
           ),
         })}
-        .label=${this.hass.localize(
-          "ui.dialogs.more_info_control.cover.close_tilt_cover"
-        )}
+        .label=${this.hass.localize("ui.card.cover.close_tilt_cover")}
         .path=${mdiArrowBottomLeft}
         @click=${this._onCloseTiltTap}
         .disabled=${!canCloseTilt(this.stateObj)}

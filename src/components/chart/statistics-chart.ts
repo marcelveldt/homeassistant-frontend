@@ -12,13 +12,14 @@ import {
   PropertyValues,
   TemplateResult,
 } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { customElement, property, state, query } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { getGraphColorByIndex } from "../../common/color/colors";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import {
   formatNumber,
   numberFormatToLocale,
+  getNumberFormatOptions,
 } from "../../common/number/format_number";
 import {
   getDisplayUnit,
@@ -31,13 +32,13 @@ import {
 } from "../../data/recorder";
 import type { HomeAssistant } from "../../types";
 import "./ha-chart-base";
+import type {
+  ChartResizeOptions,
+  ChartDatasetExtra,
+  HaChartBase,
+} from "./ha-chart-base";
 
-export type ExtendedStatisticType = StatisticType | "change";
-
-export const supportedStatTypeMap: Record<
-  ExtendedStatisticType,
-  StatisticType
-> = {
+export const supportedStatTypeMap: Record<StatisticType, StatisticType> = {
   mean: "mean",
   min: "min",
   max: "max",
@@ -46,33 +47,24 @@ export const supportedStatTypeMap: Record<
   change: "sum",
 };
 
-export const statTypeMap: Record<ExtendedStatisticType, StatisticType> = {
-  mean: "mean",
-  min: "min",
-  max: "max",
-  sum: "sum",
-  state: "state",
-  change: "sum",
-};
-
 @customElement("statistics-chart")
-class StatisticsChart extends LitElement {
+export class StatisticsChart extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ attribute: false }) public statisticsData!: Statistics;
+  @property({ attribute: false }) public statisticsData?: Statistics;
 
   @property({ attribute: false }) public metadata?: Record<
     string,
     StatisticsMetaData
   >;
 
-  @property() public names?: Record<string, string>;
+  @property({ attribute: false }) public names?: Record<string, string>;
 
   @property() public unit?: string;
 
   @property({ attribute: false }) public endTime?: Date;
 
-  @property({ type: Array }) public statTypes: Array<ExtendedStatisticType> = [
+  @property({ type: Array }) public statTypes: Array<StatisticType> = [
     "sum",
     "min",
     "mean",
@@ -83,23 +75,55 @@ class StatisticsChart extends LitElement {
 
   @property({ type: Boolean }) public hideLegend = false;
 
+  @property({ type: Boolean }) public logarithmicScale = false;
+
   @property({ type: Boolean }) public isLoadingData = false;
+
+  @property() public period?: string;
 
   @state() private _chartData: ChartData = { datasets: [] };
 
+  @state() private _chartDatasetExtra: ChartDatasetExtra[] = [];
+
+  @state() private _statisticIds: string[] = [];
+
   @state() private _chartOptions?: ChartOptions;
 
+  @state() private _hiddenStats = new Set<string>();
+
+  @query("ha-chart-base") private _chart?: HaChartBase;
+
   private _computedStyle?: CSSStyleDeclaration;
+
+  public resize = (options?: ChartResizeOptions): void => {
+    this._chart?.resize(options);
+  };
 
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     return changedProps.size > 1 || !changedProps.has("hass");
   }
 
   public willUpdate(changedProps: PropertyValues) {
-    if (!this.hasUpdated || changedProps.has("unit")) {
+    if (changedProps.has("legendMode")) {
+      this._hiddenStats.clear();
+    }
+    if (
+      !this.hasUpdated ||
+      changedProps.has("unit") ||
+      changedProps.has("period") ||
+      changedProps.has("chartType") ||
+      changedProps.has("logarithmicScale") ||
+      changedProps.has("hideLegend")
+    ) {
       this._createOptions();
     }
-    if (changedProps.has("statisticsData") || changedProps.has("statTypes")) {
+    if (
+      changedProps.has("statisticsData") ||
+      changedProps.has("statTypes") ||
+      changedProps.has("chartType") ||
+      changedProps.has("hideLegend") ||
+      changedProps.has("_hiddenStats")
+    ) {
       this._generateData();
     }
   }
@@ -133,27 +157,49 @@ class StatisticsChart extends LitElement {
 
     return html`
       <ha-chart-base
+        externalHidden
         .hass=${this.hass}
         .data=${this._chartData}
+        .extraData=${this._chartDatasetExtra}
         .options=${this._chartOptions}
         .chartType=${this.chartType}
+        @dataset-hidden=${this._datasetHidden}
+        @dataset-unhidden=${this._datasetUnhidden}
       ></ha-chart-base>
     `;
+  }
+
+  private _datasetHidden(ev) {
+    ev.stopPropagation();
+    this._hiddenStats.add(this._statisticIds[ev.detail.index]);
+    this.requestUpdate("_hiddenStats");
+  }
+
+  private _datasetUnhidden(ev) {
+    ev.stopPropagation();
+    this._hiddenStats.delete(this._statisticIds[ev.detail.index]);
+    this.requestUpdate("_hiddenStats");
   }
 
   private _createOptions(unit?: string) {
     this._chartOptions = {
       parsing: false,
       animation: false,
+      interaction: {
+        mode: "nearest",
+        axis: "x",
+      },
       scales: {
         x: {
           type: "time",
           adapters: {
             date: {
               locale: this.hass.locale,
+              config: this.hass.config,
             },
           },
           ticks: {
+            source: this.chartType === "bar" ? "data" : undefined,
             maxRotation: 0,
             sampleSize: 5,
             autoSkipPadding: 20,
@@ -167,10 +213,16 @@ class StatisticsChart extends LitElement {
           },
           time: {
             tooltipFormat: "datetime",
+            unit:
+              this.chartType === "bar" &&
+              this.period &&
+              ["hour", "day", "week", "month"].includes(this.period)
+                ? this.period
+                : undefined,
           },
         },
         y: {
-          beginAtZero: false,
+          beginAtZero: this.chartType === "bar",
           ticks: {
             maxTicksLimit: 7,
           },
@@ -178,16 +230,20 @@ class StatisticsChart extends LitElement {
             display: unit || this.unit,
             text: unit || this.unit,
           },
+          type: this.logarithmicScale ? "logarithmic" : "linear",
         },
       },
       plugins: {
         tooltip: {
-          mode: "nearest",
           callbacks: {
             label: (context) =>
               `${context.dataset.label}: ${formatNumber(
                 context.parsed.y,
-                this.hass.locale
+                this.hass.locale,
+                getNumberFormatOptions(
+                  undefined,
+                  this.hass.entities[this._statisticIds[context.datasetIndex]]
+                )
               )} ${
                 // @ts-ignore
                 context.dataset.unit || ""
@@ -204,9 +260,6 @@ class StatisticsChart extends LitElement {
           },
         },
       },
-      hover: {
-        mode: "nearest",
-      },
       elements: {
         line: {
           tension: 0.4,
@@ -215,7 +268,7 @@ class StatisticsChart extends LitElement {
         },
         bar: { borderWidth: 1.5, borderRadius: 4 },
         point: {
-          hitRadius: 5,
+          hitRadius: 50,
         },
       },
       // @ts-expect-error
@@ -249,6 +302,8 @@ class StatisticsChart extends LitElement {
     let colorIndex = 0;
     const statisticsData = Object.entries(this.statisticsData);
     const totalDataSets: ChartDataset<"line">[] = [];
+    const totalDatasetExtras: ChartDatasetExtra[] = [];
+    const statisticIds: string[] = [];
     let endTime: Date;
 
     if (statisticsData.length === 0) {
@@ -298,6 +353,7 @@ class StatisticsChart extends LitElement {
 
       // The datasets for the current statistic
       const statDataSets: ChartDataset<"line">[] = [];
+      const statDatasetExtras: ChartDatasetExtra[] = [];
 
       const pushData = (
         start: Date,
@@ -312,6 +368,7 @@ class StatisticsChart extends LitElement {
         }
         statDataSets.forEach((d, i) => {
           if (
+            this.chartType === "line" &&
             prevEndTime &&
             prevValues &&
             prevEndTime.getTime() !== start.getTime()
@@ -328,13 +385,22 @@ class StatisticsChart extends LitElement {
         prevEndTime = end;
       };
 
-      const color = getGraphColorByIndex(colorIndex, this._computedStyle!);
+      const color = getGraphColorByIndex(
+        colorIndex,
+        this._computedStyle || getComputedStyle(this)
+      );
       colorIndex++;
 
       const statTypes: this["statTypes"] = [];
 
-      const drawBands =
+      const hasMean =
         this.statTypes.includes("mean") && statisticsHaveType(stats, "mean");
+      const drawBands =
+        hasMean ||
+        (this.statTypes.includes("min") &&
+          statisticsHaveType(stats, "min") &&
+          this.statTypes.includes("max") &&
+          statisticsHaveType(stats, "max"));
 
       const sortedTypes = drawBands
         ? [...this.statTypes].sort((a, b) => {
@@ -348,9 +414,20 @@ class StatisticsChart extends LitElement {
           })
         : this.statTypes;
 
+      let displayed_legend = false;
       sortedTypes.forEach((type) => {
-        if (statisticsHaveType(stats, statTypeMap[type])) {
+        if (statisticsHaveType(stats, type)) {
           const band = drawBands && (type === "min" || type === "max");
+          if (!this.hideLegend) {
+            const show_legend = hasMean
+              ? type === "mean"
+              : displayed_legend === false;
+            statDatasetExtras.push({
+              legend_label: name,
+              show_legend,
+            });
+            displayed_legend = displayed_legend || show_legend;
+          }
           statTypes.push(type);
           statDataSets.push({
             label: name
@@ -362,27 +439,31 @@ class StatisticsChart extends LitElement {
                   `ui.components.statistics_charts.statistic_types.${type}`
                 ),
             fill: drawBands
-              ? type === "min"
+              ? type === "min" && hasMean
                 ? "+1"
                 : type === "max"
-                ? "-1"
-                : false
+                  ? "-1"
+                  : false
               : false,
-            borderColor: band ? color + (this.hideLegend ? "00" : "7F") : color,
+            borderColor:
+              band && hasMean ? color + (this.hideLegend ? "00" : "7F") : color,
             backgroundColor: band ? color + "3F" : color + "7F",
             pointRadius: 0,
+            hidden: !this.hideLegend
+              ? this._hiddenStats.has(statistic_id)
+              : false,
             data: [],
             // @ts-ignore
             unit: meta?.unit_of_measurement,
             band,
           });
+          statisticIds.push(statistic_id);
         }
       });
 
       let prevDate: Date | null = null;
       // Process chart data.
       let firstSum: number | null | undefined = null;
-      let prevSum: number | null | undefined = null;
       stats.forEach((stat) => {
         const startDate = new Date(stat.start);
         if (prevDate === startDate) {
@@ -399,27 +480,17 @@ class StatisticsChart extends LitElement {
             } else {
               val = (stat.sum || 0) - firstSum;
             }
-          } else if (type === "change") {
-            if (prevSum === null || prevSum === undefined) {
-              prevSum = stat.sum;
-              return;
-            }
-            val = (stat.sum || 0) - prevSum;
-            prevSum = stat.sum;
           } else {
             val = stat[type];
           }
-          dataValues.push(
-            val !== null && val !== undefined
-              ? Math.round(val * 100) / 100
-              : null
-          );
+          dataValues.push(val ?? null);
         });
         pushData(startDate, new Date(stat.end), dataValues);
       });
 
       // Concat two arrays
       Array.prototype.push.apply(totalDataSets, statDataSets);
+      Array.prototype.push.apply(totalDatasetExtras, statDatasetExtras);
     });
 
     if (unit) {
@@ -429,6 +500,8 @@ class StatisticsChart extends LitElement {
     this._chartData = {
       datasets: totalDataSets,
     };
+    this._chartDatasetExtra = totalDatasetExtras;
+    this._statisticIds = statisticIds;
   }
 
   static get styles(): CSSResultGroup {

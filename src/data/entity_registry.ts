@@ -5,6 +5,41 @@ import { computeStateName } from "../common/entity/compute_state_name";
 import { caseInsensitiveStringCompare } from "../common/string/compare";
 import { debounce } from "../common/util/debounce";
 import { HomeAssistant } from "../types";
+import { LightColor } from "./light";
+import { computeDomain } from "../common/entity/compute_domain";
+
+export { subscribeEntityRegistryDisplay } from "./ws-entity_registry_display";
+
+type entityCategory = "config" | "diagnostic";
+
+export interface EntityRegistryDisplayEntry {
+  entity_id: string;
+  name?: string;
+  icon?: string;
+  device_id?: string;
+  area_id?: string;
+  hidden?: boolean;
+  entity_category?: entityCategory;
+  translation_key?: string;
+  platform?: string;
+  display_precision?: number;
+}
+
+export interface EntityRegistryDisplayEntryResponse {
+  entities: {
+    ei: string;
+    di?: string;
+    ai?: string;
+    ec?: number;
+    en?: string;
+    ic?: string;
+    pl?: string;
+    tk?: string;
+    hb?: boolean;
+    dp?: number;
+  }[];
+  entity_categories: Record<number, entityCategory>;
+}
 
 export interface EntityRegistryEntry {
   id: string;
@@ -17,11 +52,12 @@ export interface EntityRegistryEntry {
   area_id: string | null;
   disabled_by: "user" | "device" | "integration" | "config_entry" | null;
   hidden_by: Exclude<EntityRegistryEntry["disabled_by"], "config_entry">;
-  entity_category: "config" | "diagnostic" | null;
+  entity_category: entityCategory | null;
   has_entity_name: boolean;
   original_name?: string;
   unique_id: string;
   translation_key?: string;
+  options: EntityRegistryOptions | null;
 }
 
 export interface ExtEntityRegistryEntry extends EntityRegistryEntry {
@@ -30,7 +66,6 @@ export interface ExtEntityRegistryEntry extends EntityRegistryEntry {
   device_class?: string;
   original_device_class?: string;
   aliases: string[];
-  options: EntityRegistryOptions | null;
 }
 
 export interface UpdateEntityRegistryEntryResult {
@@ -40,12 +75,21 @@ export interface UpdateEntityRegistryEntryResult {
 }
 
 export interface SensorEntityOptions {
-  precision?: number | null;
+  display_precision?: number | null;
+  suggested_display_precision?: number | null;
   unit_of_measurement?: string | null;
+}
+
+export interface LightEntityOptions {
+  favorite_colors?: LightColor[];
 }
 
 export interface NumberEntityOptions {
   unit_of_measurement?: string | null;
+}
+
+export interface LockEntityOptions {
+  default_code?: string | null;
 }
 
 export interface WeatherEntityOptions {
@@ -56,10 +100,21 @@ export interface WeatherEntityOptions {
   wind_speed_unit?: string | null;
 }
 
+export interface SwitchAsXEntityOptions {
+  entity_id: string;
+  invert: boolean;
+}
+
 export interface EntityRegistryOptions {
   number?: NumberEntityOptions;
   sensor?: SensorEntityOptions;
+  lock?: LockEntityOptions;
   weather?: WeatherEntityOptions;
+  light?: LightEntityOptions;
+  switch_as_x?: SwitchAsXEntityOptions;
+  conversation?: Record<string, unknown>;
+  "cloud.alexa"?: Record<string, unknown>;
+  "cloud.google_assistant"?: Record<string, unknown>;
 }
 
 export interface EntityRegistryEntryUpdateParams {
@@ -71,24 +126,43 @@ export interface EntityRegistryEntryUpdateParams {
   hidden_by: string | null;
   new_entity_id?: string;
   options_domain?: string;
-  options?: SensorEntityOptions | NumberEntityOptions | WeatherEntityOptions;
+  options?:
+    | SensorEntityOptions
+    | NumberEntityOptions
+    | LockEntityOptions
+    | WeatherEntityOptions
+    | LightEntityOptions;
   aliases?: string[];
 }
 
-export const findBatteryEntity = (
+const batteryPriorities = ["sensor", "binary_sensor"];
+export const findBatteryEntity = <T extends { entity_id: string }>(
   hass: HomeAssistant,
-  entities: EntityRegistryEntry[]
-): EntityRegistryEntry | undefined =>
-  entities.find(
-    (entity) =>
-      hass.states[entity.entity_id] &&
-      hass.states[entity.entity_id].attributes.device_class === "battery"
-  );
+  entities: T[]
+): T | undefined => {
+  const batteryEntities = entities
+    .filter(
+      (entity) =>
+        hass.states[entity.entity_id] &&
+        hass.states[entity.entity_id].attributes.device_class === "battery" &&
+        batteryPriorities.includes(computeDomain(entity.entity_id))
+    )
+    .sort(
+      (a, b) =>
+        batteryPriorities.indexOf(computeDomain(a.entity_id)) -
+        batteryPriorities.indexOf(computeDomain(b.entity_id))
+    );
+  if (batteryEntities.length > 0) {
+    return batteryEntities[0];
+  }
 
-export const findBatteryChargingEntity = (
+  return undefined;
+};
+
+export const findBatteryChargingEntity = <T extends { entity_id: string }>(
   hass: HomeAssistant,
-  entities: EntityRegistryEntry[]
-): EntityRegistryEntry | undefined =>
+  entities: T[]
+): T | undefined =>
   entities.find(
     (entity) =>
       hass.states[entity.entity_id] &&
@@ -153,6 +227,11 @@ export const fetchEntityRegistry = (conn: Connection) =>
     type: "config/entity_registry/list",
   });
 
+export const fetchEntityRegistryDisplay = (conn: Connection) =>
+  conn.sendMessagePromise<EntityRegistryDisplayEntryResponse>({
+    type: "config/entity_registry/list_for_display",
+  });
+
 const subscribeEntityRegistryUpdates = (
   conn: Connection,
   store: Store<EntityRegistryEntry[]>
@@ -189,10 +268,20 @@ export const sortEntityRegistryByName = (
     caseInsensitiveStringCompare(entry1.name || "", entry2.name || "", language)
   );
 
+export const entityRegistryByEntityId = memoizeOne(
+  (entries: EntityRegistryEntry[]) => {
+    const entities: Record<string, EntityRegistryEntry> = {};
+    for (const entity of entries) {
+      entities[entity.entity_id] = entity;
+    }
+    return entities;
+  }
+);
+
 export const entityRegistryById = memoizeOne(
-  (entries: HomeAssistant["entities"]) => {
-    const entities: HomeAssistant["entities"] = {};
-    for (const entity of Object.values(entries)) {
+  (entries: EntityRegistryEntry[]) => {
+    const entities: Record<string, EntityRegistryEntry> = {};
+    for (const entity of entries) {
       entities[entity.id] = entity;
     }
     return entities;

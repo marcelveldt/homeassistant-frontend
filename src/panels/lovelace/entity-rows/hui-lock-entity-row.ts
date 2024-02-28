@@ -5,7 +5,7 @@ import {
   html,
   LitElement,
   PropertyValues,
-  TemplateResult,
+  nothing,
 } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { isUnavailableState } from "../../../data/entity";
@@ -14,6 +14,7 @@ import { hasConfigOrEntityChanged } from "../common/has-changed";
 import "../components/hui-generic-entity-row";
 import { createEntityNotFoundWarning } from "../components/hui-warning";
 import { EntityConfig, LovelaceRow } from "./types";
+import { callProtectedLockService } from "../../../data/lock";
 
 @customElement("hui-lock-entity-row")
 class HuiLockEntityRow extends LitElement implements LovelaceRow {
@@ -32,9 +33,9 @@ class HuiLockEntityRow extends LitElement implements LovelaceRow {
     return hasConfigOrEntityChanged(this, changedProps);
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this._config || !this.hass) {
-      return html``;
+      return nothing;
     }
 
     const stateObj = this.hass.states[this._config.entity];
@@ -66,6 +67,8 @@ class HuiLockEntityRow extends LitElement implements LovelaceRow {
     return css`
       mwc-button {
         margin-right: -0.57em;
+        margin-inline-end: -0.57em;
+        margin-inline-start: initial;
       }
     `;
   }
@@ -73,10 +76,11 @@ class HuiLockEntityRow extends LitElement implements LovelaceRow {
   private _callService(ev): void {
     ev.stopPropagation();
     const stateObj = this.hass!.states[this._config!.entity];
-    this.hass!.callService(
-      "lock",
-      stateObj.state === "locked" ? "unlock" : "lock",
-      { entity_id: stateObj.entity_id }
+    callProtectedLockService(
+      this,
+      this.hass!,
+      stateObj,
+      stateObj.state === "locked" ? "unlock" : "lock"
     );
   }
 }

@@ -1,38 +1,49 @@
 import { ComboBoxLitRenderer } from "@vaadin/combo-box/lit";
-import { html, LitElement, PropertyValues, TemplateResult } from "lit";
+import { HassEntity } from "home-assistant-js-websocket";
+import { html, LitElement, nothing, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../common/dom/fire_event";
 import { computeDomain } from "../common/entity/compute_domain";
 import {
+  fuzzyFilterSort,
+  ScorableTextItem,
+} from "../common/string/filter/sequence-matching";
+import {
   AreaRegistryEntry,
   createAreaRegistryEntry,
 } from "../data/area_registry";
 import {
-  DeviceEntityLookup,
+  DeviceEntityDisplayLookup,
   DeviceRegistryEntry,
+  getDeviceEntityDisplayLookup,
 } from "../data/device_registry";
-import { EntityRegistryEntry } from "../data/entity_registry";
+import { EntityRegistryDisplayEntry } from "../data/entity_registry";
 import {
   showAlertDialog,
   showPromptDialog,
 } from "../dialogs/generic/show-dialog-box";
-import { PolymerChangedEvent } from "../polymer-types";
-import { HomeAssistant } from "../types";
+import { HomeAssistant, ValueChangedEvent } from "../types";
 import type { HaDevicePickerDeviceFilterFunc } from "./device/ha-device-picker";
 import "./ha-combo-box";
 import type { HaComboBox } from "./ha-combo-box";
 import "./ha-icon-button";
+import "./ha-list-item";
 import "./ha-svg-icon";
 
-const rowRenderer: ComboBoxLitRenderer<AreaRegistryEntry> = (
-  item
-) => html`<mwc-list-item
-  class=${classMap({ "add-new": item.area_id === "add_new" })}
->
-  ${item.name}
-</mwc-list-item>`;
+type ScorableAreaRegistryEntry = ScorableTextItem & AreaRegistryEntry;
+
+const rowRenderer: ComboBoxLitRenderer<AreaRegistryEntry> = (item) =>
+  html`<ha-list-item
+    graphic="icon"
+    class=${classMap({ "add-new": item.area_id === "add_new" })}
+  >
+    ${item.icon
+      ? html`<ha-icon slot="graphic" .icon=${item.icon}></ha-icon>`
+      : nothing}
+    ${item.name}
+  </ha-list-item>`;
 
 @customElement("ha-area-picker")
 export class HaAreaPicker extends LitElement {
@@ -47,7 +58,7 @@ export class HaAreaPicker extends LitElement {
   @property() public placeholder?: string;
 
   @property({ type: Boolean, attribute: "no-add" })
-  public noAdd?: boolean;
+  public noAdd = false;
 
   /**
    * Show only areas with entities from specific domains.
@@ -81,13 +92,15 @@ export class HaAreaPicker extends LitElement {
   @property({ type: Array, attribute: "exclude-areas" })
   public excludeAreas?: string[];
 
-  @property() public deviceFilter?: HaDevicePickerDeviceFilterFunc;
+  @property({ attribute: false })
+  public deviceFilter?: HaDevicePickerDeviceFilterFunc;
 
-  @property() public entityFilter?: (entity: EntityRegistryEntry) => boolean;
+  @property({ attribute: false })
+  public entityFilter?: (entity: HassEntity) => boolean;
 
-  @property({ type: Boolean }) public disabled?: boolean;
+  @property({ type: Boolean }) public disabled = false;
 
-  @property({ type: Boolean }) public required?: boolean;
+  @property({ type: Boolean }) public required = false;
 
   @state() private _opened?: boolean;
 
@@ -111,7 +124,7 @@ export class HaAreaPicker extends LitElement {
     (
       areas: AreaRegistryEntry[],
       devices: DeviceRegistryEntry[],
-      entities: EntityRegistryEntry[],
+      entities: EntityRegistryDisplayEntry[],
       includeDomains: this["includeDomains"],
       excludeDomains: this["excludeDomains"],
       includeDeviceClasses: this["includeDeviceClasses"],
@@ -126,101 +139,113 @@ export class HaAreaPicker extends LitElement {
             area_id: "no_areas",
             name: this.hass.localize("ui.components.area-picker.no_areas"),
             picture: null,
+            icon: null,
             aliases: [],
           },
         ];
       }
 
-      const deviceEntityLookup: DeviceEntityLookup = {};
+      let deviceEntityLookup: DeviceEntityDisplayLookup = {};
       let inputDevices: DeviceRegistryEntry[] | undefined;
-      let inputEntities: EntityRegistryEntry[] | undefined;
+      let inputEntities: EntityRegistryDisplayEntry[] | undefined;
 
-      if (includeDomains || excludeDomains || includeDeviceClasses) {
-        for (const entity of entities) {
-          if (!entity.device_id) {
-            continue;
-          }
-          if (!(entity.device_id in deviceEntityLookup)) {
-            deviceEntityLookup[entity.device_id] = [];
-          }
-          deviceEntityLookup[entity.device_id].push(entity);
-        }
+      if (
+        includeDomains ||
+        excludeDomains ||
+        includeDeviceClasses ||
+        deviceFilter ||
+        entityFilter
+      ) {
+        deviceEntityLookup = getDeviceEntityDisplayLookup(entities);
         inputDevices = devices;
         inputEntities = entities.filter((entity) => entity.area_id);
-      } else {
-        if (deviceFilter) {
-          inputDevices = devices;
-        }
-        if (entityFilter) {
-          inputEntities = entities.filter((entity) => entity.area_id);
-        }
-      }
 
-      if (includeDomains) {
-        inputDevices = inputDevices!.filter((device) => {
-          const devEntities = deviceEntityLookup[device.id];
-          if (!devEntities || !devEntities.length) {
-            return false;
-          }
-          return deviceEntityLookup[device.id].some((entity) =>
+        if (includeDomains) {
+          inputDevices = inputDevices!.filter((device) => {
+            const devEntities = deviceEntityLookup[device.id];
+            if (!devEntities || !devEntities.length) {
+              return false;
+            }
+            return deviceEntityLookup[device.id].some((entity) =>
+              includeDomains.includes(computeDomain(entity.entity_id))
+            );
+          });
+          inputEntities = inputEntities!.filter((entity) =>
             includeDomains.includes(computeDomain(entity.entity_id))
           );
-        });
-        inputEntities = inputEntities!.filter((entity) =>
-          includeDomains.includes(computeDomain(entity.entity_id))
-        );
-      }
+        }
 
-      if (excludeDomains) {
-        inputDevices = inputDevices!.filter((device) => {
-          const devEntities = deviceEntityLookup[device.id];
-          if (!devEntities || !devEntities.length) {
-            return true;
-          }
-          return entities.every(
+        if (excludeDomains) {
+          inputDevices = inputDevices!.filter((device) => {
+            const devEntities = deviceEntityLookup[device.id];
+            if (!devEntities || !devEntities.length) {
+              return true;
+            }
+            return entities.every(
+              (entity) =>
+                !excludeDomains.includes(computeDomain(entity.entity_id))
+            );
+          });
+          inputEntities = inputEntities!.filter(
             (entity) =>
               !excludeDomains.includes(computeDomain(entity.entity_id))
           );
-        });
-        inputEntities = inputEntities!.filter(
-          (entity) => !excludeDomains.includes(computeDomain(entity.entity_id))
-        );
-      }
+        }
 
-      if (includeDeviceClasses) {
-        inputDevices = inputDevices!.filter((device) => {
-          const devEntities = deviceEntityLookup[device.id];
-          if (!devEntities || !devEntities.length) {
-            return false;
-          }
-          return deviceEntityLookup[device.id].some((entity) => {
-            const stateObj = this.hass.states[entity.entity_id];
-            if (!stateObj) {
+        if (includeDeviceClasses) {
+          inputDevices = inputDevices!.filter((device) => {
+            const devEntities = deviceEntityLookup[device.id];
+            if (!devEntities || !devEntities.length) {
               return false;
             }
+            return deviceEntityLookup[device.id].some((entity) => {
+              const stateObj = this.hass.states[entity.entity_id];
+              if (!stateObj) {
+                return false;
+              }
+              return (
+                stateObj.attributes.device_class &&
+                includeDeviceClasses.includes(stateObj.attributes.device_class)
+              );
+            });
+          });
+          inputEntities = inputEntities!.filter((entity) => {
+            const stateObj = this.hass.states[entity.entity_id];
             return (
               stateObj.attributes.device_class &&
               includeDeviceClasses.includes(stateObj.attributes.device_class)
             );
           });
-        });
-        inputEntities = inputEntities!.filter((entity) => {
-          const stateObj = this.hass.states[entity.entity_id];
-          return (
-            stateObj.attributes.device_class &&
-            includeDeviceClasses.includes(stateObj.attributes.device_class)
+        }
+
+        if (deviceFilter) {
+          inputDevices = inputDevices!.filter((device) =>
+            deviceFilter!(device)
           );
-        });
-      }
+        }
 
-      if (deviceFilter) {
-        inputDevices = inputDevices!.filter((device) => deviceFilter!(device));
-      }
-
-      if (entityFilter) {
-        inputEntities = inputEntities!.filter((entity) =>
-          entityFilter!(entity)
-        );
+        if (entityFilter) {
+          inputDevices = inputDevices!.filter((device) => {
+            const devEntities = deviceEntityLookup[device.id];
+            if (!devEntities || !devEntities.length) {
+              return false;
+            }
+            return deviceEntityLookup[device.id].some((entity) => {
+              const stateObj = this.hass.states[entity.entity_id];
+              if (!stateObj) {
+                return false;
+              }
+              return entityFilter(stateObj);
+            });
+          });
+          inputEntities = inputEntities!.filter((entity) => {
+            const stateObj = this.hass.states[entity.entity_id];
+            if (!stateObj) {
+              return false;
+            }
+            return entityFilter!(stateObj);
+          });
+        }
       }
 
       let outputAreas = areas;
@@ -242,7 +267,9 @@ export class HaAreaPicker extends LitElement {
       }
 
       if (areaIds) {
-        outputAreas = areas.filter((area) => areaIds!.includes(area.area_id));
+        outputAreas = outputAreas.filter((area) =>
+          areaIds!.includes(area.area_id)
+        );
       }
 
       if (excludeAreas) {
@@ -257,6 +284,7 @@ export class HaAreaPicker extends LitElement {
             area_id: "no_areas",
             name: this.hass.localize("ui.components.area-picker.no_match"),
             picture: null,
+            icon: null,
             aliases: [],
           },
         ];
@@ -270,6 +298,7 @@ export class HaAreaPicker extends LitElement {
               area_id: "add_new",
               name: this.hass.localize("ui.components.area-picker.add_new"),
               picture: null,
+              icon: "mdi:plus",
               aliases: [],
             },
           ];
@@ -293,9 +322,12 @@ export class HaAreaPicker extends LitElement {
         this.entityFilter,
         this.noAdd,
         this.excludeAreas
-      );
-      (this.comboBox as any).items = areas;
-      (this.comboBox as any).filteredItems = areas;
+      ).map((area) => ({
+        ...area,
+        strings: [area.area_id, ...area.aliases, area.name],
+      }));
+      this.comboBox.items = areas;
+      this.comboBox.filteredItems = areas;
     }
   }
 
@@ -307,7 +339,7 @@ export class HaAreaPicker extends LitElement {
         item-value-path="area_id"
         item-id-path="area_id"
         item-label-path="name"
-        .value=${this.value}
+        .value=${this._value}
         .disabled=${this.disabled}
         .required=${this.required}
         .label=${this.label === undefined && this.hass
@@ -326,17 +358,19 @@ export class HaAreaPicker extends LitElement {
   }
 
   private _filterChanged(ev: CustomEvent): void {
-    const filter = ev.detail.value;
-    if (!filter) {
+    const target = ev.target as HaComboBox;
+    const filterString = ev.detail.value;
+    if (!filterString) {
       this.comboBox.filteredItems = this.comboBox.items;
       return;
     }
 
-    const filteredItems = this.comboBox.items?.filter((item) =>
-      item.name.toLowerCase().includes(filter!.toLowerCase())
+    const filteredItems = fuzzyFilterSort<ScorableAreaRegistryEntry>(
+      filterString,
+      target.items || []
     );
     if (!this.noAdd && filteredItems?.length === 0) {
-      this._suggestion = filter;
+      this._suggestion = filterString;
       this.comboBox.filteredItems = [
         {
           area_id: "add_new_suggestion",
@@ -356,11 +390,11 @@ export class HaAreaPicker extends LitElement {
     return this.value || "";
   }
 
-  private _openedChanged(ev: PolymerChangedEvent<boolean>) {
+  private _openedChanged(ev: ValueChangedEvent<boolean>) {
     this._opened = ev.detail.value;
   }
 
-  private _areaChanged(ev: PolymerChangedEvent<string>) {
+  private _areaChanged(ev: ValueChangedEvent<string>) {
     ev.stopPropagation();
     let newValue = ev.detail.value;
 
@@ -396,7 +430,7 @@ export class HaAreaPicker extends LitElement {
             name,
           });
           const areas = [...Object.values(this.hass.areas), area];
-          (this.comboBox as any).filteredItems = this._getAreas(
+          this.comboBox.filteredItems = this._getAreas(
             areas,
             Object.values(this.hass.devices)!,
             Object.values(this.hass.entities)!,
@@ -423,6 +457,7 @@ export class HaAreaPicker extends LitElement {
       cancel: () => {
         this._setValue(undefined);
         this._suggestion = undefined;
+        this.comboBox.setInputValue("");
       },
     });
   }

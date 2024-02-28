@@ -1,5 +1,5 @@
 import { mdiStop } from "@mdi/js";
-import { css, CSSResultGroup, html, LitElement, TemplateResult } from "lit";
+import { css, CSSResultGroup, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { computeCloseIcon, computeOpenIcon } from "../common/entity/cover_icon";
@@ -20,9 +20,9 @@ class HaCoverControls extends LitElement {
 
   @property({ attribute: false }) public stateObj!: CoverEntity;
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this.stateObj) {
-      return html``;
+      return nothing;
     }
 
     return html`
@@ -31,9 +31,7 @@ class HaCoverControls extends LitElement {
           class=${classMap({
             hidden: !supportsFeature(this.stateObj, CoverEntityFeature.OPEN),
           })}
-          .label=${this.hass.localize(
-            "ui.dialogs.more_info_control.cover.open_cover"
-          )}
+          .label=${this.hass.localize("ui.card.cover.open_cover")}
           @click=${this._onOpenTap}
           .disabled=${!canOpen(this.stateObj)}
           .path=${computeOpenIcon(this.stateObj)}
@@ -43,9 +41,7 @@ class HaCoverControls extends LitElement {
           class=${classMap({
             hidden: !supportsFeature(this.stateObj, CoverEntityFeature.STOP),
           })}
-          .label=${this.hass.localize(
-            "ui.dialogs.more_info_control.cover.stop_cover"
-          )}
+          .label=${this.hass.localize("ui.card.cover.stop_cover")}
           .path=${mdiStop}
           @click=${this._onStopTap}
           .disabled=${!canStop(this.stateObj)}
@@ -54,9 +50,7 @@ class HaCoverControls extends LitElement {
           class=${classMap({
             hidden: !supportsFeature(this.stateObj, CoverEntityFeature.CLOSE),
           })}
-          .label=${this.hass.localize(
-            "ui.dialogs.more_info_control.cover.close_cover"
-          )}
+          .label=${this.hass.localize("ui.card.cover.close_cover")}
           @click=${this._onCloseTap}
           .disabled=${!canClose(this.stateObj)}
           .path=${computeCloseIcon(this.stateObj)}

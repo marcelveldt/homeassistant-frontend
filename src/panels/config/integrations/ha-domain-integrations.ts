@@ -3,7 +3,10 @@ import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { fireEvent } from "../../../common/dom/fire_event";
-import { protocolIntegrationPicked } from "../../../common/integrations/protocolIntegrationPicked";
+import {
+  protocolIntegrationPicked,
+  PROTOCOL_INTEGRATIONS,
+} from "../../../common/integrations/protocolIntegrationPicked";
 import { shouldHandleRequestSelectedEvent } from "../../../common/mwc/handle-request-selected-event";
 import { navigate } from "../../../common/navigate";
 import { caseInsensitiveStringCompare } from "../../../common/string/compare";
@@ -41,29 +44,31 @@ class HaDomainIntegrations extends LitElement {
               ${this.hass.localize("ui.panel.config.integrations.discovered")}
             </h3>
             ${this.flowsInProgress.map(
-              (flow) => html`<mwc-list-item
-                graphic="medium"
-                .flow=${flow}
-                @request-selected=${this._flowInProgressPicked}
-                hasMeta
-              >
-                <img
-                  alt=""
-                  slot="graphic"
-                  loading="lazy"
-                  src=${brandsUrl({
-                    domain: flow.handler,
-                    type: "icon",
-                    useFallback: true,
-                    darkOptimized: this.hass.themes?.darkMode,
-                  })}
-                  referrerpolicy="no-referrer"
-                />
-                <span
-                  >${localizeConfigFlowTitle(this.hass.localize, flow)}</span
+              (flow) =>
+                html`<mwc-list-item
+                  graphic="medium"
+                  .flow=${flow}
+                  @request-selected=${this._flowInProgressPicked}
+                  hasMeta
                 >
-                <ha-icon-next slot="meta"></ha-icon-next>
-              </mwc-list-item>`
+                  <img
+                    alt=""
+                    slot="graphic"
+                    loading="lazy"
+                    src=${brandsUrl({
+                      domain: flow.handler,
+                      type: "icon",
+                      useFallback: true,
+                      darkOptimized: this.hass.themes?.darkMode,
+                    })}
+                    crossorigin="anonymous"
+                    referrerpolicy="no-referrer"
+                  />
+                  <span
+                    >${localizeConfigFlowTitle(this.hass.localize, flow)}</span
+                  >
+                  <ha-icon-next slot="meta"></ha-icon-next>
+                </mwc-list-item>`
             )}
             <li divider role="separator"></li>
             ${this.integration &&
@@ -77,38 +82,42 @@ class HaDomainIntegrations extends LitElement {
               : ""}`
         : ""}
       ${this.integration?.iot_standards
-        ? (
-            this.integration.iot_standards.filter(
-              (standard) => standard in standardToDomain
-            ) as (keyof typeof standardToDomain)[]
-          ).map((standard) => {
-            const domain = standardToDomain[standard];
-            return html`<mwc-list-item
-              graphic="medium"
-              .domain=${domain}
-              @request-selected=${this._standardPicked}
-              hasMeta
-            >
-              <img
-                slot="graphic"
-                loading="lazy"
-                alt=""
-                src=${brandsUrl({
-                  domain,
-                  type: "icon",
-                  useFallback: true,
-                  darkOptimized: this.hass.themes?.darkMode,
-                })}
-                referrerpolicy="no-referrer"
-              />
-              <span
-                >${this.hass.localize(
-                  `ui.panel.config.integrations.add_${domain}_device`
-                )}</span
+        ? this.integration.iot_standards
+            .filter((standard) =>
+              (PROTOCOL_INTEGRATIONS as ReadonlyArray<string>).includes(
+                standardToDomain[standard] || standard
+              )
+            )
+            .map((standard) => {
+              const domain: (typeof PROTOCOL_INTEGRATIONS)[number] =
+                standardToDomain[standard] || standard;
+              return html`<mwc-list-item
+                graphic="medium"
+                .domain=${domain}
+                @request-selected=${this._standardPicked}
+                hasMeta
               >
-              <ha-icon-next slot="meta"></ha-icon-next>
-            </mwc-list-item>`;
-          })
+                <img
+                  slot="graphic"
+                  loading="lazy"
+                  alt=""
+                  src=${brandsUrl({
+                    domain,
+                    type: "icon",
+                    useFallback: true,
+                    darkOptimized: this.hass.themes?.darkMode,
+                  })}
+                  crossorigin="anonymous"
+                  referrerpolicy="no-referrer"
+                />
+                <span
+                  >${this.hass.localize(
+                    `ui.panel.config.integrations.add_${domain}_device`
+                  )}</span
+                >
+                <ha-icon-next slot="meta"></ha-icon-next>
+              </mwc-list-item>`;
+            })
         : ""}
       ${this.integration &&
       "integrations" in this.integration &&
@@ -144,7 +153,7 @@ class HaDomainIntegrations extends LitElement {
                 </ha-integration-list-item>`
             )
         : ""}
-      ${this.domain === "zha" || this.domain === "zwave_js"
+      ${(PROTOCOL_INTEGRATIONS as ReadonlyArray<string>).includes(this.domain)
         ? html`<mwc-list-item
             graphic="medium"
             .domain=${this.domain}
@@ -161,11 +170,14 @@ class HaDomainIntegrations extends LitElement {
                 useFallback: true,
                 darkOptimized: this.hass.themes?.darkMode,
               })}
+              crossorigin="anonymous"
               referrerpolicy="no-referrer"
             />
             <span
               >${this.hass.localize(
-                `ui.panel.config.integrations.add_${this.domain}_device`
+                `ui.panel.config.integrations.add_${
+                  this.domain as (typeof PROTOCOL_INTEGRATIONS)[number]
+                }_device`
               )}</span
             >
             <ha-icon-next slot="meta"></ha-icon-next>

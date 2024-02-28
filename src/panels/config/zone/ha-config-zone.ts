@@ -2,7 +2,7 @@ import { mdiCog, mdiPencil, mdiPencilOff, mdiPlus } from "@mdi/js";
 import "@polymer/paper-item/paper-icon-item";
 import "@polymer/paper-item/paper-item-body";
 import "@polymer/paper-listbox/paper-listbox";
-import "@polymer/paper-tooltip/paper-tooltip";
+import "@lrnwebcomponents/simple-tooltip/simple-tooltip";
 import { HassEntity, UnsubscribeFunc } from "home-assistant-js-websocket";
 import {
   css,
@@ -52,11 +52,13 @@ import { showZoneDetailDialog } from "./show-dialog-zone-detail";
 export class HaConfigZone extends SubscribeMixin(LitElement) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property() public isWide?: boolean;
+  @property({ type: Boolean }) public isWide = false;
 
-  @property() public narrow?: boolean;
+  @property({ type: Boolean }) public narrow = false;
 
-  @property() public route!: Route;
+  @property({ attribute: false }) public route!: Route;
+
+  @state() private _searchParms = new URLSearchParams(window.location.search);
 
   @state() private _storageItems?: Zone[];
 
@@ -92,8 +94,8 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
             entityState.entity_id === "zone.home"
               ? homeRadiusColor
               : entityState.attributes.passive
-              ? passiveRadiusColor
-              : zoneRadiusColor,
+                ? passiveRadiusColor
+                : zoneRadiusColor,
           location_editable:
             entityState.entity_id === "zone.home" && this._canEditCore,
           radius_editable: false,
@@ -200,11 +202,11 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
                       ></ha-icon-button>
                       ${stateObject.entity_id !== "zone.home"
                         ? html`
-                            <paper-tooltip animation-delay="0" position="left">
+                            <simple-tooltip animation-delay="0" position="left">
                               ${hass.localize(
                                 "ui.panel.config.zone.configured_in_yaml"
                               )}
-                            </paper-tooltip>
+                            </simple-tooltip>
                           `
                         : ""}
                     </div>
@@ -219,7 +221,9 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
         .hass=${this.hass}
         .narrow=${this.narrow}
         .route=${this.route}
-        back-path="/config"
+        .backPath=${this._searchParms.has("historyBack")
+          ? undefined
+          : "/config"}
         .tabs=${configSections.areas}
       >
         ${this.narrow
@@ -546,5 +550,11 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
         cursor: pointer;
       }
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "ha-config-zone": HaConfigZone;
   }
 }

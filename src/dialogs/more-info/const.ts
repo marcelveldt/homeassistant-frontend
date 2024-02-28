@@ -1,9 +1,11 @@
+import { HassEntity } from "home-assistant-js-websocket";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { computeDomain } from "../../common/entity/compute_domain";
+import { computeGroupDomain, GroupEntity } from "../../data/group";
 import { CONTINUOUS_DOMAINS } from "../../data/logbook";
 import { HomeAssistant } from "../../types";
 
-export const DOMAINS_NO_INFO = ["camera", "configurator"];
+export const DOMAINS_NO_INFO = ["camera", "configurator", "script"];
 /**
  * Entity domains that should be editable *if* they have an id present;
  * {@see shouldShowEditIcon}.
@@ -13,7 +15,21 @@ export const EDITABLE_DOMAINS_WITH_ID = ["scene", "automation"];
  * Entity Domains that should always be editable; {@see shouldShowEditIcon}.
  * */
 export const EDITABLE_DOMAINS_WITH_UNIQUE_ID = ["script"];
-
+/** Domains with with new more info design. */
+export const DOMAINS_WITH_NEW_MORE_INFO = [
+  "alarm_control_panel",
+  "cover",
+  "climate",
+  "fan",
+  "humidifier",
+  "input_boolean",
+  "light",
+  "lock",
+  "siren",
+  "switch",
+  "valve",
+  "water_heater",
+];
 /** Domains with separate more info dialog. */
 export const DOMAINS_WITH_MORE_INFO = [
   "alarm_control_panel",
@@ -23,10 +39,15 @@ export const DOMAINS_WITH_MORE_INFO = [
   "configurator",
   "counter",
   "cover",
+  "date",
+  "datetime",
   "fan",
   "group",
   "humidifier",
+  "image",
+  "input_boolean",
   "input_datetime",
+  "lawn_mower",
   "light",
   "lock",
   "media_player",
@@ -34,10 +55,14 @@ export const DOMAINS_WITH_MORE_INFO = [
   "remote",
   "script",
   "scene",
+  "siren",
   "sun",
+  "switch",
+  "time",
   "timer",
   "update",
   "vacuum",
+  "valve",
   "water_heater",
   "weather",
 ];
@@ -53,6 +78,7 @@ export const DOMAINS_HIDE_DEFAULT_MORE_INFO = [
   "select",
   "text",
   "update",
+  "event",
 ];
 
 /** Domains that should have the history hidden in the more info dialog. */
@@ -87,4 +113,17 @@ export const computeShowLogBookComponent = (
   }
 
   return true;
+};
+
+export const computeShowNewMoreInfo = (stateObj: HassEntity): boolean => {
+  const domain = computeDomain(stateObj.entity_id);
+  if (domain === "group") {
+    const groupDomain = computeGroupDomain(stateObj as GroupEntity);
+    return (
+      groupDomain != null &&
+      groupDomain !== "group" &&
+      DOMAINS_WITH_NEW_MORE_INFO.includes(groupDomain)
+    );
+  }
+  return DOMAINS_WITH_NEW_MORE_INFO.includes(domain);
 };

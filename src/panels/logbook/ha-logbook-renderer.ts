@@ -5,8 +5,8 @@ import {
   CSSResultGroup,
   html,
   LitElement,
+  nothing,
   PropertyValues,
-  TemplateResult,
 } from "lit";
 import { customElement, eventOptions, property } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
@@ -35,8 +35,10 @@ import {
   haStyle,
   haStyleScrollbar,
 } from "../../resources/styles";
+import { loadVirtualizer } from "../../resources/virtualizer";
 import { HomeAssistant } from "../../types";
 import { brandsUrl } from "../../util/brands-url";
+import { domainToName } from "../../data/integration";
 
 declare global {
   interface HASSDomEvents {
@@ -83,6 +85,17 @@ class HaLogbookRenderer extends LitElement {
   // @ts-ignore
   @restoreScroll(".container") private _savedScrollPos?: number;
 
+  protected willUpdate(changedProps: PropertyValues<this>) {
+    if (
+      (!this.hasUpdated && this.virtualize) ||
+      (changedProps.has("virtualize") && this.virtualize)
+    ) {
+      this.hass.loadBackendTranslation("services");
+      this.hass.loadBackendTranslation("title");
+      loadVirtualizer();
+    }
+  }
+
   protected shouldUpdate(changedProps: PropertyValues<this>) {
     const oldHass = changedProps.get("hass") as HomeAssistant | undefined;
     const languageChanged =
@@ -95,7 +108,7 @@ class HaLogbookRenderer extends LitElement {
     );
   }
 
-  protected render(): TemplateResult {
+  protected render() {
     if (!this.entries?.length) {
       return html`
         <div class="container no-entries">
@@ -129,12 +142,9 @@ class HaLogbookRenderer extends LitElement {
     `;
   }
 
-  private _renderLogbookItem = (
-    item: LogbookEntry,
-    index: number
-  ): TemplateResult => {
+  private _renderLogbookItem = (item: LogbookEntry, index: number) => {
     if (!item || index === undefined) {
-      return html``;
+      return nothing;
     }
     const previous = this.entries[index - 1] as LogbookEntry | undefined;
     const seenEntityIds: string[] = [];
@@ -185,10 +195,14 @@ class HaLogbookRenderer extends LitElement {
             new Date(previous.when * 1000).toDateString())
           ? html`
               <h4 class="date">
-                ${formatDate(new Date(item.when * 1000), this.hass.locale)}
+                ${formatDate(
+                  new Date(item.when * 1000),
+                  this.hass.locale,
+                  this.hass.config
+                )}
               </h4>
             `
-          : html``}
+          : nothing}
 
         <div class="entry ${classMap({ "no-entity": !item.entity_id })}">
           <div class="icon-message">
@@ -222,7 +236,8 @@ class HaLogbookRenderer extends LitElement {
                 <span
                   >${formatTimeWithSeconds(
                     new Date(item.when * 1000),
-                    this.hass.locale
+                    this.hass.locale,
+                    this.hass.config
                   )}</span
                 >
                 -
@@ -387,7 +402,16 @@ class HaLogbookRenderer extends LitElement {
       return html`${this.hass.localize(
         "ui.components.logbook.triggered_by_service"
       )}
-      ${item.context_domain}.${item.context_service}`;
+      ${item.context_domain && item.context_service
+        ? `${domainToName(this.hass.localize, item.context_domain)}:
+      ${
+        this.hass.localize(
+          `component.${item.context_domain}.services.${item.context_service}.name`
+        ) ||
+        this.hass.services[item.context_domain]?.[item.context_service]?.name ||
+        item.context_service
+      }`
+        : ""}`;
     }
     if (
       !item.context_message ||
@@ -687,8 +711,8 @@ class HaLogbookRenderer extends LitElement {
         .narrow .icon-message state-badge {
           margin-left: 0;
           margin-inline-start: 0;
-          margin-inline-end: 8px;
           margin-right: 8px;
+          margin-inline-end: 8px;
           direction: var(--direction);
         }
       `,
