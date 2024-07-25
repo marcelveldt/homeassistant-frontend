@@ -3,22 +3,24 @@ import { css, CSSResultGroup, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-yaml-editor";
+
 import type { HaYamlEditor } from "../../../../components/ha-yaml-editor";
 import { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import { LovelaceSectionConfig } from "../../../../data/lovelace/config/section";
+import { LovelaceConfig } from "../../../../data/lovelace/config/types";
 import { isStrategyView } from "../../../../data/lovelace/config/view";
 import { haStyleDialog } from "../../../../resources/styles";
 import { HomeAssistant } from "../../../../types";
 import { showSaveSuccessToast } from "../../../../util/toast-saved-success";
+import "../../sections/hui-section";
 import { addCards, addSection } from "../config-util";
 import {
   LovelaceContainerPath,
   parseLovelaceContainerPath,
 } from "../lovelace-path";
-import "./hui-card-preview";
+import "../../cards/hui-card";
 import { showCreateCardDialog } from "./show-create-card-dialog";
 import { SuggestCardDialogParams } from "./show-suggest-card-dialog";
-import { LovelaceConfig } from "../../../../data/lovelace/config/types";
 
 @customElement("hui-dialog-suggest-card")
 export class HuiDialogSuggestCard extends LitElement {
@@ -73,6 +75,7 @@ export class HuiDialogSuggestCard extends LitElement {
           <hui-section
             .hass=${this.hass}
             .config=${this._sectionConfig}
+            preview
           ></hui-section>
         </div>
       `;
@@ -82,10 +85,11 @@ export class HuiDialogSuggestCard extends LitElement {
         <div class="element-preview">
           ${this._cardConfig.map(
             (cardConfig) => html`
-              <hui-card-preview
+              <hui-card
                 .hass=${this.hass}
                 .config=${cardConfig}
-              ></hui-card-preview>
+                preview
+              ></hui-card>
             `
           )}
         </div>
@@ -131,11 +135,15 @@ export class HuiDialogSuggestCard extends LitElement {
         </mwc-button>
         ${!this._params.yaml
           ? html`
-              <mwc-button slot="primaryAction" @click=${this._pickCard}
-                >${this.hass!.localize(
-                  "ui.panel.lovelace.editor.suggest_card.create_own"
-                )}</mwc-button
-              >
+              ${!(this._sectionConfig && this._viewSupportsSection)
+                ? html`
+                    <mwc-button slot="primaryAction" @click=${this._pickCard}>
+                      ${this.hass!.localize(
+                        "ui.panel.lovelace.editor.suggest_card.create_own"
+                      )}
+                    </mwc-button>
+                  `
+                : nothing}
               <mwc-button
                 slot="primaryAction"
                 .disabled=${this._saving}
@@ -154,7 +162,7 @@ export class HuiDialogSuggestCard extends LitElement {
                     )}
               </mwc-button>
             `
-          : ""}
+          : nothing}
       </ha-dialog>
     `;
   }
@@ -185,7 +193,7 @@ export class HuiDialogSuggestCard extends LitElement {
         .element-preview {
           position: relative;
         }
-        hui-card-preview,
+        hui-card,
         hui-section {
           padding-top: 8px;
           margin: 4px auto;

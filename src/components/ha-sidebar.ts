@@ -210,6 +210,8 @@ class HaSidebar extends SubscribeMixin(LitElement) {
 
   private _editStyleLoaded = false;
 
+  private _unsubPersistentNotifications: UnsubscribeFunc | undefined;
+
   @storage({
     key: "sidebarPanelOrder",
     state: true,
@@ -283,15 +285,26 @@ class HaSidebar extends SubscribeMixin(LitElement) {
       hass.localize !== oldHass.localize ||
       hass.locale !== oldHass.locale ||
       hass.states !== oldHass.states ||
-      hass.defaultPanel !== oldHass.defaultPanel
+      hass.defaultPanel !== oldHass.defaultPanel ||
+      hass.connected !== oldHass.connected
     );
   }
 
   protected firstUpdated(changedProps: PropertyValues) {
     super.firstUpdated(changedProps);
-    subscribeNotifications(this.hass.connection, (notifications) => {
-      this._notifications = notifications;
-    });
+    this.subscribePersistentNotifications();
+  }
+
+  private subscribePersistentNotifications(): void {
+    if (this._unsubPersistentNotifications) {
+      this._unsubPersistentNotifications();
+    }
+    this._unsubPersistentNotifications = subscribeNotifications(
+      this.hass.connection,
+      (notifications) => {
+        this._notifications = notifications;
+      }
+    );
   }
 
   protected updated(changedProps) {
@@ -304,6 +317,14 @@ class HaSidebar extends SubscribeMixin(LitElement) {
     }
     if (!changedProps.has("hass")) {
       return;
+    }
+
+    if (
+      this.hass &&
+      changedProps.get("hass")?.connected === false &&
+      this.hass.connected === true
+    ) {
+      this.subscribePersistentNotifications();
     }
 
     this._calculateCounts();
@@ -327,6 +348,7 @@ class HaSidebar extends SubscribeMixin(LitElement) {
     for (const entityId of Object.keys(this.hass.states)) {
       if (
         entityId.startsWith("update.") &&
+        !this.hass.entities[entityId]?.hidden &&
         updateCanInstall(this.hass.states[entityId] as UpdateEntity)
       ) {
         updateCount++;
@@ -1010,8 +1032,8 @@ class HaSidebar extends SubscribeMixin(LitElement) {
         }
         .profile paper-icon-item {
           padding-left: 4px;
-          margin-inline-start: 4px;
-          margin-inline-end: auto;
+          padding-inline-start: 4px;
+          padding-inline-end: auto;
         }
         .profile .item-text {
           margin-left: 8px;
@@ -1040,6 +1062,8 @@ class HaSidebar extends SubscribeMixin(LitElement) {
           position: absolute;
           bottom: 14px;
           left: 26px;
+          inset-inline-start: 26px;
+          inset-inline-end: initial;
           font-size: 0.65em;
         }
 

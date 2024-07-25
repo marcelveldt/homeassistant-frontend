@@ -28,6 +28,7 @@ import "../../../components/ha-icon-button";
 import "../../../components/ha-list-item";
 import { LovelaceCardConfig } from "../../../data/lovelace/config/card";
 import { saveConfig } from "../../../data/lovelace/config/types";
+import { isStrategyView } from "../../../data/lovelace/config/view";
 import {
   showAlertDialog,
   showPromptDialog,
@@ -45,12 +46,13 @@ import {
 } from "../editor/config-util";
 import {
   LovelaceCardPath,
-  findLovelaceCards,
+  findLovelaceItems,
   getLovelaceContainerPath,
   parseLovelaceCardPath,
 } from "../editor/lovelace-path";
 import { showSelectViewDialog } from "../editor/select-view/show-select-view-dialog";
 import { Lovelace, LovelaceCard } from "../types";
+import { SECTION_VIEW_LAYOUT } from "../views/const";
 
 @customElement("hui-card-options")
 export class HuiCardOptions extends LitElement {
@@ -65,7 +67,7 @@ export class HuiCardOptions extends LitElement {
   @property({ type: Boolean }) public hidePosition = false;
 
   @storage({
-    key: "lovelaceClipboard",
+    key: "dashboardCardClipboard",
     state: false,
     subscribe: false,
     storage: "sessionStorage",
@@ -89,7 +91,7 @@ export class HuiCardOptions extends LitElement {
 
   private get _cards() {
     const containerPath = getLovelaceContainerPath(this.path!);
-    return findLovelaceCards(this.lovelace!.config, containerPath)!;
+    return findLovelaceItems("cards", this.lovelace!.config, containerPath)!;
   }
 
   protected render(): TemplateResult {
@@ -351,6 +353,21 @@ export class HuiCardOptions extends LitElement {
       allowDashboardChange: true,
       header: this.hass!.localize("ui.panel.lovelace.editor.move_card.header"),
       viewSelectedCallback: async (urlPath, selectedDashConfig, viewIndex) => {
+        const view = selectedDashConfig.views[viewIndex];
+
+        if (!isStrategyView(view) && view.type === SECTION_VIEW_LAYOUT) {
+          showAlertDialog(this, {
+            title: this.hass!.localize(
+              "ui.panel.lovelace.editor.move_card.error_title"
+            ),
+            text: this.hass!.localize(
+              "ui.panel.lovelace.editor.move_card.error_text_section"
+            ),
+            warning: true,
+          });
+          return;
+        }
+
         if (urlPath === this.lovelace!.urlPath) {
           this.lovelace!.saveConfig(
             moveCardToContainer(this.lovelace!.config, this.path!, [viewIndex])

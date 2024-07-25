@@ -114,7 +114,7 @@ export class StateHistoryChartTimeline extends LitElement {
               config: this.hass.config,
             },
           },
-          suggestedMin: this.startTime,
+          min: this.startTime,
           suggestedMax: this.endTime,
           ticks: {
             autoSkip: true,
@@ -159,10 +159,10 @@ export class StateHistoryChartTimeline extends LitElement {
           },
           afterUpdate: (y) => {
             const yWidth = this.showNames
-              ? y.width ?? 0
+              ? (y.width ?? 0)
               : computeRTL(this.hass)
                 ? 0
-                : y.left ?? 0;
+                : (y.left ?? 0);
             if (
               this._yWidth !== Math.floor(yWidth) &&
               y.ticks.length === this.data.length
